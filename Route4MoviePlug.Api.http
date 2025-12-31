@@ -1,0 +1,19 @@
+@Route4MoviePlug_Api_HostAddress = http://localhost:5158
+
+# Get all clients
+GET {{Route4MoviePlug_Api_HostAddress}}/api/clients
+Accept: application/json
+
+###
+
+# Get Making of MARY client
+GET {{Route4MoviePlug_Api_HostAddress}}/api/clients/making-of-mary
+Accept: application/json
+
+###
+
+# Get Making of MARY splash page
+GET {{Route4MoviePlug_Api_HostAddress}}/api/clients/making-of-mary/splashpage
+Accept: application/json
+
+###
