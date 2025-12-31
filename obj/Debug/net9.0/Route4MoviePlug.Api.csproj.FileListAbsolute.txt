@@ -40,3 +40,8 @@ C:\Users\rodne\Src\route4-movieplug\obj\Debug\net9.0\Route4MoviePlug.Api.pdb
 C:\Users\rodne\Src\route4-movieplug\obj\Debug\net9.0\Route4MoviePlug.Api.genruntimeconfig.cache
 C:\Users\rodne\Src\route4-movieplug\obj\Debug\net9.0\ref\Route4MoviePlug.Api.dll
 C:\Users\rodne\Src\route4-movieplug\bin\Debug\net9.0\ClientApp\proxy.conf.json
+C:\Users\rodne\Src\route4-movieplug\obj\Debug\net9.0\Route4MoviePlug.Api.sourcelink.json
+C:\Users\rodne\Src\route4-movieplug\bin\Debug\net9.0\Newtonsoft.Json.dll
+C:\Users\rodne\Src\route4-movieplug\bin\Debug\net9.0\Stripe.net.dll
+C:\Users\rodne\Src\route4-movieplug\bin\Debug\net9.0\System.Configuration.ConfigurationManager.dll
+C:\Users\rodne\Src\route4-movieplug\bin\Debug\net9.0\System.Security.Cryptography.ProtectedData.dll
