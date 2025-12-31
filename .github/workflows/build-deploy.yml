@@ -1,0 +1,141 @@
+name: Build and Deploy Route4-MoviePlug
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x]
+        dotnet-version: ['9.0.x']
+    
+    steps:
+    # Checkout code
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    
+    # Setup .NET
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ matrix.dotnet-version }}
+    
+    # Setup Node.js
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+    
+    # Restore .NET dependencies
+    - name: Restore .NET dependencies
+      run: dotnet restore
+    
+    # Build .NET API
+    - name: Build .NET API
+      run: dotnet build Route4MoviePlug.Api.csproj --configuration Release --no-restore
+    
+    # Install Angular dependencies
+    - name: Install Angular dependencies
+      run: npm install
+      working-directory: ./ClientApp
+    
+    # Build Angular app (production)
+    - name: Build Angular app
+      run: npm run build
+      working-directory: ./ClientApp
+    
+    # Run Angular tests (optional - add when tests exist)
+    # - name: Run Angular tests
+    #   run: npm test -- --watch=false --code-coverage
+    #   working-directory: ./ClientApp
+    
+    # Run .NET tests (optional - add when tests exist)
+    # - name: Run .NET tests
+    #   run: dotnet test --configuration Release --no-build
+    
+    # Upload build artifacts (backend)
+    - name: Upload API artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: api-build-${{ github.sha }}
+        path: bin/Release/net9.0/
+    
+    # Upload build artifacts (frontend)
+    - name: Upload Frontend artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-build-${{ github.sha }}
+        path: ClientApp/dist/
+    
+    # Security scanning (optional)
+    - name: Run security checks
+      run: |
+        dotnet list Route4MoviePlug.Api.csproj package --vulnerable
+      continue-on-error: true
+
+  deploy:
+    needs: build
+    runs-on: windows-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download API artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: api-build-${{ github.sha }}
+        path: ./api-release
+    
+    - name: Download Frontend artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build-${{ github.sha }}
+        path: ./frontend-release
+    
+    # Example: Deploy to Azure App Service (uncomment and configure)
+    # - name: Deploy API to Azure App Service
+    #   uses: azure/webapps-deploy@v2
+    #   with:
+    #     app-name: 'route4-movieplug-api'
+    #     publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+    #     package: ./api-release
+    
+    # Example: Deploy frontend to Azure Static Web Apps (uncomment and configure)
+    # - name: Deploy Frontend to Azure Static Web Apps
+    #   uses: Azure/static-web-apps-deploy@v1
+    #   with:
+    #     azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_TOKEN }}
+    #     action: 'upload'
+    #     app_location: './frontend-release'
+    
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-package-${{ github.sha }}
+        path: |
+          ./api-release
+          ./frontend-release
+
+  notify:
+    needs: [build]
+    runs-on: windows-latest
+    if: always()
+    
+    steps:
+    - name: Notify on build success
+      if: needs.build.result == 'success'
+      run: echo "✅ Build succeeded!"
+    
+    - name: Notify on build failure
+      if: needs.build.result == 'failure'
+      run: |
+        echo "❌ Build failed!"
+        exit 1
