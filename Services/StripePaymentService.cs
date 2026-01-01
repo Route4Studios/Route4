@@ -51,7 +51,7 @@ public class StripePaymentService : IStripePaymentService
             long amountInCents = (long)(tier.Price * 100);
             long applicationFeeInCents = (long)(amountInCents * stripeAccount.ApplicationFeePercent / 100);
 
-            // Create payment intent with application fee (Route4 takes a cut)
+            // Create payment intent - simplified for testing (no Connect account required)
             var intentOptions = new PaymentIntentCreateOptions
             {
                 Amount = amountInCents,
@@ -65,8 +65,9 @@ public class StripePaymentService : IStripePaymentService
                     { "client_id", clientId.ToString() },
                     { "customer_email", customerEmail }
                 },
-                ApplicationFeeAmount = applicationFeeInCents,
-                OnBehalfOf = stripeAccount.StripeAccountId, // Send to client's Stripe account
+                // Removed Connect account fields for testing
+                // ApplicationFeeAmount = applicationFeeInCents,
+                // OnBehalfOf = stripeAccount.StripeAccountId,
             };
 
             var service = new PaymentIntentService();

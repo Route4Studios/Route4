@@ -21,4 +21,10 @@ public class HealthController : ControllerBase
             }
         });
     }
+
+    [HttpGet("api/health")]
+    public IActionResult ApiHealth()
+    {
+        return Ok(new { status = "ok", service = "Route4-MoviePlug API" });
+    }
 }

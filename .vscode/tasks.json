@@ -4,7 +4,7 @@
 		{
 			"label": "Run Backend API",
 			"type": "shell",
-			"command": "dotnet run --project MakingOfMaryApi.csproj",
+			"command": "dotnet run --project Route4MoviePlug.Api.csproj",
 			"isBackground": true,
 			"problemMatcher": [
 				"$msCompile"

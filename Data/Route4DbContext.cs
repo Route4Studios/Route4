@@ -9,6 +9,7 @@ public class Route4DbContext : DbContext
     {
     }
 
+    // Original models
     public DbSet<Client> Clients { get; set; }
     public DbSet<SplashPage> SplashPages { get; set; }
     public DbSet<Benefit> Benefits { get; set; }
@@ -16,6 +17,17 @@ public class Route4DbContext : DbContext
     public DbSet<TierFeature> TierFeatures { get; set; }
     public DbSet<StripeAccount> StripeAccounts { get; set; }
     public DbSet<Payment> Payments { get; set; }
+
+    // Route4 Architecture Models
+    public DbSet<ReleaseCycleTemplate> ReleaseCycleTemplates { get; set; }
+    public DbSet<ReleaseStageTemplate> ReleaseStageTemplates { get; set; }
+    public DbSet<ReleaseInstance> ReleaseInstances { get; set; }
+    public DbSet<ReleaseStageExecution> ReleaseStageExecutions { get; set; }
+    public DbSet<ReleaseArtifact> ReleaseArtifacts { get; set; }
+    public DbSet<WitnessEvent> WitnessEvents { get; set; }
+    public DbSet<DiscordConfiguration> DiscordConfigurations { get; set; }
+    public DbSet<DiscordChannel> DiscordChannels { get; set; }
+    public DbSet<DiscordRole> DiscordRoles { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -130,6 +142,9 @@ public class Route4DbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Route4 Architecture Model Configurations
+        ConfigureRoute4Models(modelBuilder);
+
         // Seed initial data
         SeedData(modelBuilder);
     }
@@ -213,11 +228,11 @@ public class Route4DbContext : DbContext
             {
                 Id = tier1Id,
                 ClientId = makingOfMaryId,
-                Name = "Film Students",
-                Description = "Perfect for aspiring filmmakers who want to learn from industry professionals and gain hands-on experience.",
-                Price = 149.00m,
-                PriceInterval = "year",
-                TagLine = "Learn from the Voltron team",
+                Name = "Signal Discovery",
+                Description = "Pay per signal witnessed. Discover anonymous pre-artifacts and fragments as they emerge without ongoing subscriptions.",
+                Price = 7.50m,
+                PriceInterval = "per-signal",
+                TagLine = "Cross the threshold to witness",
                 IsFeatured = false,
                 DisplayOrder = 1,
                 IsActive = true
@@ -226,11 +241,11 @@ public class Route4DbContext : DbContext
             {
                 Id = tier2Id,
                 ClientId = makingOfMaryId,
-                Name = "Investors",
-                Description = "Become a co-producer and own a piece of the film. Get equity stake, executive producer credit, and VIP treatment at the premiere.",
-                Price = 10000.00m,
-                PriceInterval = "one-time",
-                TagLine = "Own a piece of cinema history",
+                Name = "Ritual Participation",
+                Description = "Pay per writing table, shot council, or process session attended. Witness the creative process without story outcomes.",
+                Price = 20.00m,
+                PriceInterval = "per-session",
+                TagLine = "Witness process, not outcomes",
                 IsFeatured = true,
                 DisplayOrder = 2,
                 IsActive = true
@@ -239,11 +254,11 @@ public class Route4DbContext : DbContext
             {
                 Id = tier3Id,
                 ClientId = makingOfMaryId,
-                Name = "Cult Fans",
-                Description = "For true movie buffs who want the ultimate fan experience and exclusive access to the creative process.",
-                Price = 179.00m,
-                PriceInterval = "year",
-                TagLine = "Join the inner circle",
+                Name = "Private Viewing",
+                Description = "Pay per private viewing event attended. Exclusive offline-safe access in protected locations with verified witness status.",
+                Price = 35.00m,
+                PriceInterval = "per-viewing",
+                TagLine = "Sacred witness moments",
                 IsFeatured = false,
                 DisplayOrder = 3,
                 IsActive = true
@@ -251,26 +266,190 @@ public class Route4DbContext : DbContext
         );
 
         modelBuilder.Entity<TierFeature>().HasData(
-            // Film Students Features
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Voltron masterclass series with industry pros", IsHighlighted = true, DisplayOrder = 1 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "On-set access during filming", IsHighlighted = false, DisplayOrder = 2 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Fox 45 studio tours", IsHighlighted = false, DisplayOrder = 3 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Production diary & script access", IsHighlighted = false, DisplayOrder = 4 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Community Discord access", IsHighlighted = false, DisplayOrder = 5 },
+            // Signal Discovery Features (Threshold-based)
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Anonymous signal drops as they emerge", IsHighlighted = true, DisplayOrder = 1 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "BTS fragments without story context", IsHighlighted = false, DisplayOrder = 2 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Tools, hands, rooms — no explanations", IsHighlighted = false, DisplayOrder = 3 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Pay only when you choose to witness", IsHighlighted = false, DisplayOrder = 4 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "No subscriptions, no ongoing fees", IsHighlighted = false, DisplayOrder = 5 },
             
-            // Investors Features
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Equity stake in the film", IsHighlighted = true, DisplayOrder = 1 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Executive Producer credit", IsHighlighted = true, DisplayOrder = 2 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "VIP premiere & after-party access", IsHighlighted = false, DisplayOrder = 3 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Monthly investor updates", IsHighlighted = false, DisplayOrder = 4 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "All Film Students + Cult Fans benefits", IsHighlighted = false, DisplayOrder = 5 },
+            // Ritual Participation Features (Threshold-based)
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Writing table sessions (decisions, not outcomes)", IsHighlighted = true, DisplayOrder = 1 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Shot council participation (process preview)", IsHighlighted = true, DisplayOrder = 2 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Color/edit sessions without story reveals", IsHighlighted = false, DisplayOrder = 3 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Reflection channels after ritual participation", IsHighlighted = false, DisplayOrder = 4 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Pay per session attended, not time-based", IsHighlighted = false, DisplayOrder = 5 },
             
-            // Cult Fans Features
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Premiere party invitation", IsHighlighted = true, DisplayOrder = 1 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Exclusive merchandise & memorabilia", IsHighlighted = false, DisplayOrder = 2 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Cast & crew Q&A sessions", IsHighlighted = false, DisplayOrder = 3 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Behind-the-scenes video library", IsHighlighted = false, DisplayOrder = 4 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Community Discord with special channels", IsHighlighted = false, DisplayOrder = 5 }
+            // Private Viewing Features (Threshold-based)
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Private location screenings (QR-based access)", IsHighlighted = true, DisplayOrder = 1 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Offline-safe viewing with verified witness status", IsHighlighted = false, DisplayOrder = 2 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "No recording, no sharing — sacred witness moments", IsHighlighted = false, DisplayOrder = 3 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Invitation-only events for proven participants", IsHighlighted = false, DisplayOrder = 4 },
+            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Pay only when invited and you choose to attend", IsHighlighted = false, DisplayOrder = 5 }
         );
+
+        // Seed Stripe Account (for testing)
+        modelBuilder.Entity<StripeAccount>().HasData(
+            new StripeAccount
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                StripeAccountId = "acct_test_MakingOfMary", // Test account ID
+                IsActive = true,
+                ApplicationFeePercent = 10.00m, // Route4 takes 10%
+                ConnectedAt = DateTime.UtcNow
+            }
+        );
+    }
+
+    private void ConfigureRoute4Models(ModelBuilder modelBuilder)
+    {
+        // Release Cycle Template
+        modelBuilder.Entity<ReleaseCycleTemplate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            
+            entity.HasOne(e => e.Client)
+                .WithMany()
+                .HasForeignKey(e => e.ClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Release Stage Template
+        modelBuilder.Entity<ReleaseStageTemplate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Type).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.VisibilityLevel).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.DiscordChannelTemplate).HasMaxLength(100);
+            
+            entity.HasOne(e => e.ReleaseCycleTemplate)
+                .WithMany(t => t.Stages)
+                .HasForeignKey(e => e.ReleaseCycleTemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Release Instance
+        modelBuilder.Entity<ReleaseInstance>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.CurrentStage).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.HasIndex(e => new { e.ClientId, e.Key }).IsUnique();
+            
+            entity.HasOne(e => e.Client)
+                .WithMany()
+                .HasForeignKey(e => e.ClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            entity.HasOne(e => e.ReleaseCycleTemplate)
+                .WithMany()
+                .HasForeignKey(e => e.ReleaseCycleTemplateId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Release Stage Execution
+        modelBuilder.Entity<ReleaseStageExecution>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.StageName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+            
+            entity.HasOne(e => e.ReleaseInstance)
+                .WithMany(r => r.StageExecutions)
+                .HasForeignKey(e => e.ReleaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Release Artifact
+        modelBuilder.Entity<ReleaseArtifact>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Kind).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.VisibilityLevel).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.Stage).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.FileName).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.ContentType).HasMaxLength(100);
+            entity.Property(e => e.StorageProvider).HasMaxLength(50);
+            entity.Property(e => e.ProviderAssetId).HasMaxLength(200);
+            entity.Property(e => e.PlaybackEmbedUrl).HasMaxLength(1000);
+            entity.Property(e => e.DownloadUrl).HasMaxLength(1000);
+            
+            entity.HasOne(e => e.ReleaseInstance)
+                .WithMany(r => r.Artifacts)
+                .HasForeignKey(e => e.ReleaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Witness Event
+        modelBuilder.Entity<WitnessEvent>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EventType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Stage).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.DiscordUserId).HasMaxLength(50);
+            entity.Property(e => e.DiscordChannelId).HasMaxLength(50);
+            entity.Property(e => e.Metadata).HasMaxLength(2000);
+            
+            entity.HasOne(e => e.ReleaseInstance)
+                .WithMany(r => r.WitnessEvents)
+                .HasForeignKey(e => e.ReleaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Discord Configuration
+        modelBuilder.Entity<DiscordConfiguration>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.GuildId).HasMaxLength(50);
+            entity.Property(e => e.BotToken).HasMaxLength(500); // Encrypted
+            entity.Property(e => e.LanguagePack).HasMaxLength(50);
+            
+            entity.HasOne(e => e.Client)
+                .WithOne(c => c.DiscordConfiguration)
+                .HasForeignKey<DiscordConfiguration>(e => e.ClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Discord Channel
+        modelBuilder.Entity<DiscordChannel>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ChannelId).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Purpose).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.VisibilityLevel).IsRequired().HasMaxLength(10);
+            entity.HasIndex(e => new { e.DiscordConfigurationId, e.ChannelId }).IsUnique();
+            
+            entity.HasOne(e => e.DiscordConfiguration)
+                .WithMany(d => d.Channels)
+                .HasForeignKey(e => e.DiscordConfigurationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Discord Role
+        modelBuilder.Entity<DiscordRole>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RoleId).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Type).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Description).HasMaxLength(200);
+            entity.HasIndex(e => new { e.DiscordConfigurationId, e.RoleId }).IsUnique();
+            
+            entity.HasOne(e => e.DiscordConfiguration)
+                .WithMany(d => d.Roles)
+                .HasForeignKey(e => e.DiscordConfigurationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

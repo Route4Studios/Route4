@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Route4MoviePlug.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+10f7228b62721262c9c273dd6fc25260da103946")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+649a171e5acef362af8a3ffd70d6c66ea4635934")]
 [assembly: System.Reflection.AssemblyProductAttribute("Route4MoviePlug.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Route4MoviePlug.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

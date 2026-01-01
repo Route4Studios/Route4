@@ -9,6 +9,9 @@ public class Client
     public DateTime CreatedAt { get; set; }
     public bool IsActive { get; set; }
     public ICollection<SplashPage> SplashPages { get; set; } = new List<SplashPage>();
+    
+    // Route4 Architecture Navigation
+    public DiscordConfiguration? DiscordConfiguration { get; set; }
 }
 
 public class SplashPage
@@ -220,4 +223,49 @@ public class WebhookEventRequest
     public required string Type { get; set; }
     public DateTime Created { get; set; }
     public required Dictionary<string, object> Data { get; set; }
+}
+
+// ============== DISCORD MODELS ==============
+
+public class ChannelTemplate
+{
+    public required string Name { get; set; }
+    public ChannelType Type { get; set; }
+    public string? Topic { get; set; }
+    public int Position { get; set; }
+    public bool IsPrivate { get; set; }
+    public List<string>? AllowedRoles { get; set; }
+}
+
+public class ChannelProvisioningResult
+{
+    public required string ChannelId { get; set; }
+    public required string ChannelName { get; set; }
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
+public class RoleTemplate
+{
+    public required string Name { get; set; }
+    public uint Color { get; set; }
+    public bool Hoist { get; set; }
+    public bool Mentionable { get; set; }
+    public List<string>? Permissions { get; set; }
+}
+
+public class RoleProvisioningResult
+{
+    public required string RoleId { get; set; }
+    public required string RoleName { get; set; }
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
+public enum ChannelType
+{
+    Text = 0,
+    Voice = 2,
+    Category = 4,
+    Forum = 15
 }
