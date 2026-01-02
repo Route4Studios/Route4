@@ -289,10 +289,10 @@ It does NOT:
 
 ### App IA
 
+- Practice
 - Signal
 - Episodes
 - Archive
-- Practice
 - Profile
 
 ---
