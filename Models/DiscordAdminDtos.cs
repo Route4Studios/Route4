@@ -40,6 +40,7 @@ public class ConfigureExistingServerRequest
     public required string GuildId { get; set; }
     public required string BotToken { get; set; }
     public string? LanguagePack { get; set; } = "default";
+    public string? ApplicationImageUrl { get; set; } // Bot/Application avatar image URL
 }
 
 public class DiscordBotInvitationDto

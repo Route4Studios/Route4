@@ -84,6 +84,13 @@ public class MockDiscordBotService : IDiscordBotService
         }
     }
 
+    public async Task<bool> SetApplicationImageAsync(string botToken, string imageUrl)
+    {
+        _logger.LogInformation($"Mock: Setting application image to {imageUrl}");
+        await Task.Delay(100);
+        return true;
+    }
+
     public async Task<DiscordChannelResult> ProvisionChannelTemplatesAsync(string guildId, DiscordChannelTemplateSet templates)
     {
         try

@@ -149,6 +149,7 @@ public class DiscordConfiguration
     public string? BotToken { get; set; } // Encrypted
     public bool IsActive { get; set; }
     public string? LanguagePack { get; set; } // Custom terminology
+    public string? ApplicationImageUrl { get; set; } // Bot/Application avatar image URL
     
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

@@ -270,6 +270,7 @@ public class Route4ReleaseEngineAdminController : ControllerBase
             discordConfig.BotToken = request.BotToken; // TODO: Encrypt this
             discordConfig.IsActive = true;
             discordConfig.LanguagePack = request.LanguagePack;
+            discordConfig.ApplicationImageUrl = request.ApplicationImageUrl;
             discordConfig.UpdatedAt = DateTime.UtcNow;
 
             if (client.DiscordConfiguration == null)
@@ -316,6 +317,17 @@ public class Route4ReleaseEngineAdminController : ControllerBase
             }
 
             await _context.SaveChangesAsync();
+
+            // Step 5: Set application image if provided
+            if (!string.IsNullOrEmpty(request.ApplicationImageUrl))
+            {
+                _logger.LogInformation("Setting application image for {ClientSlug} to {ImageUrl}", clientSlug, request.ApplicationImageUrl);
+                var imageResult = await _discordBot.SetApplicationImageAsync(request.BotToken, request.ApplicationImageUrl);
+                if (!imageResult)
+                {
+                    _logger.LogWarning("Failed to set application image, but continuing with setup");
+                }
+            }
 
             result.Success = true;
             result.GuildId = guildId;

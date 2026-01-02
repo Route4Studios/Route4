@@ -155,6 +155,48 @@ public class RealDiscordBotService : IDiscordBotService
             "then use the 'ExistingGuildId' parameter in your provisioning request.");
     }
 
+    public async Task<bool> SetApplicationImageAsync(string botToken, string imageUrl)
+    {
+        _logger.LogInformation("Setting application image to {ImageUrl}", imageUrl);
+        
+        try
+        {
+            var client = await GetConnectedClientAsync(botToken);
+            
+            // Download the image
+            using var httpClient = new HttpClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(30);
+            var imageBytes = await httpClient.GetByteArrayAsync(imageUrl);
+            
+            // Check size (Discord limit is 10MB, but recommend much smaller for avatars)
+            var sizeMB = imageBytes.Length / (1024.0 * 1024.0);
+            _logger.LogInformation("Downloaded image: {SizeMB:F2} MB ({Bytes} bytes)", sizeMB, imageBytes.Length);
+            
+            if (imageBytes.Length > 8 * 1024 * 1024) // 8MB conservative limit
+            {
+                _logger.LogWarning("Image too large: {SizeMB:F2} MB. Discord recommends images under 8MB for avatars.", sizeMB);
+                return false;
+            }
+            
+            // Convert to Stream and set as bot avatar
+            using var imageStream = new MemoryStream(imageBytes);
+            await client.CurrentUser.ModifyAsync(u => u.Avatar = new global::Discord.Image(imageStream));
+            
+            _logger.LogInformation("Successfully set bot avatar to {ImageUrl} ({SizeMB:F2} MB)", imageUrl, sizeMB);
+            return true;
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _logger.LogError(httpEx, "Failed to download image from {ImageUrl}: {Message}", imageUrl, httpEx.Message);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set bot avatar to {ImageUrl}: {Message}", imageUrl, ex.Message);
+            return false;
+        }
+    }
+
     public async Task<DiscordChannelResult> ProvisionChannelTemplatesAsync(string guildId, DiscordChannelTemplateSet templates)
     {
         _logger.LogInformation("Provisioning channel templates for guild {GuildId} using real Discord API", guildId);

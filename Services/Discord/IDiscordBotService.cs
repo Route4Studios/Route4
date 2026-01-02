@@ -9,6 +9,7 @@ public interface IDiscordBotService
     // Server Management
     Task<bool> ValidateServerAccessAsync(string guildId, string botToken);
     Task<string> CreateServerAsync(string serverName, string? iconUrl = null);
+    Task<bool> SetApplicationImageAsync(string botToken, string imageUrl);
     
     // Channel Management - Template-based provisioning
     Task<DiscordChannelResult> ProvisionChannelTemplatesAsync(string guildId, DiscordChannelTemplateSet templates);
