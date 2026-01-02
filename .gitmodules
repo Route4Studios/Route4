@@ -1,0 +1,3 @@
+[submodule "ClientApp"]
+	path = ClientApp
+	url = https://github.com/route4studios/route4-movieplug-client.git
