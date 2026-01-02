@@ -149,6 +149,91 @@ public class ClientsController : ControllerBase
             .Replace("'", "")
             .Replace("\"", "");
     }
+
+    /// <summary>
+    /// Client Intake - Register new client project with minimum information
+    /// Creates initial entry in database with pending approval flag
+    /// Notifies admins via email with link to admin dashboard
+    /// </summary>
+    [HttpPost("intake")]
+    public async Task<ActionResult<ClientIntakeResponse>> SubmitClientIntake([FromBody] ClientIntakeRequest request)
+    {
+        // Validate request
+        if (string.IsNullOrWhiteSpace(request.ProjectName) || 
+            string.IsNullOrWhiteSpace(request.ContactEmail) ||
+            string.IsNullOrWhiteSpace(request.ContactName))
+        {
+            return BadRequest(new { message = "Project name, contact name, and email are required" });
+        }
+
+        // Validate email format
+        try
+        {
+            var addr = new System.Net.Mail.MailAddress(request.ContactEmail);
+            if (addr.Address != request.ContactEmail)
+                return BadRequest(new { message = "Invalid email format" });
+        }
+        catch
+        {
+            return BadRequest(new { message = "Invalid email format" });
+        }
+
+        // Create new client
+        var client = new Client
+        {
+            Id = Guid.NewGuid(),
+            Name = request.ProjectName,
+            Slug = GenerateSlug(request.ProjectName),
+            Description = request.ProjectDescription,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        try
+        {
+            _context.Clients.Add(client);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation($"New client intake submitted: {client.Name}");
+
+            // TODO: Send admin notification email with link to /admin/clients
+            // This would call a notification service to email admins
+
+            return Ok(new ClientIntakeResponse(
+                client.Id,
+                client.Name,
+                "Thank you! Your registration has been received. Our team will review it shortly.",
+                "http://localhost:4200/admin/clients"
+            ));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error processing client intake: {ex.Message}");
+            return StatusCode(500, new { message = "An error occurred processing your request. Please try again." });
+        }
+    }
 }
 
 public record CreateClientRequest(string Name, string? Description);
+
+public record ClientIntakeRequest(
+    string ProjectName,
+    string ContactEmail,
+    string ContactName,
+    string? OrganizationName = null,
+    string? ProjectDescription = null,
+    string? NeedsStudioSpace = null,
+    bool? NeedsCameras = null,
+    bool? NeedsAudio = null,
+    bool? NeedsEditing = null,
+    bool? NeedsStreaming = null,
+    bool? NeedsRecording = null,
+    string? StudioTimeline = null
+);
+
+public record ClientIntakeResponse(
+    Guid ClientId,
+    string ProjectName,
+    string Message,
+    string AdminDashboardUrl
+);

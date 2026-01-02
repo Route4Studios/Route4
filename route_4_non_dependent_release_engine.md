@@ -10,6 +10,59 @@ Mary is the first client of Route4.
 
 ---
 
+## Route4 Studios — The Hybrid Model
+
+Route4 is not purely software.
+
+It is a **physical production studio** (Dayton, OH) paired with a **SaaS release platform**.
+
+### Studio Offering (Dayton, OH - Fox 45 Facility)
+- Fully equipped post-production (editing, color, sound)
+- Recording/voiceover booths (broadcast-ready)
+- Streaming infrastructure (active broadcast channels)
+- Equipment available (cameras, audio, grip)
+- Team workspace and production support
+
+### Route4 SaaS Offering
+- Non-Dependent release methodology
+- Discord orchestration
+- Witness tracking
+- Archive + visibility control
+- Sponsorship pipeline integration
+- Media artifact generation (Route4-FFmpeg)
+
+### Client Types
+1. **Studio Renters**: Traditional facility bookings + equipment
+2. **SaaS Clients**: Use Route4 release methodology only (remote)
+3. **Full Integration**: Rent studio + use Route4 for release
+4. **Voltron Internal**: Mary and future Route4-owned projects
+
+### Voltron (Internal Team)
+- 5-person creative team executing Mary and future Route4 projects
+- Expertise in sponsorship acquisition and major event production
+- Industry connections for A-list musician concerts and partnerships
+- Hybrid roles: production, business development, creative direction
+
+### Unique Advantage
+Creators don't have to choose between:
+- Expensive LA studio + no release control
+- Cheap remote production + no infrastructure
+
+Route4 offers: **modern equipment + production guidance + non-dependent release methodology + sponsorship pipeline**.
+
+### Revenue Model (Multi-Stream)
+1. **Studio rental + production services** (traditional facility model)
+2. **Route4 SaaS threshold fees** (releases, artifacts, witness activation)
+3. **Sponsorship revenue sharing** (via Voltron connections; creators benefit)
+4. **Partnership facilitation** (lease larger facilities when projects scale)
+
+### Strategic Positioning
+Route4 Studios is a Dayton-based production hub where creators build audience before release. We offer integrated production + distribution, with a sponsorship pipeline that benefits projects and partners alike.
+
+This hybrid model creates **defensible differentiation**: we're not competing with every SaaS platform or every local studio. We're offering an **integrated methodology** that marries infrastructure + expertise + ritual-based release strategy.
+
+---
+
 ## Core Philosophy
 
 Route4 exists to help creators:

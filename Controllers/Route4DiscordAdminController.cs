@@ -358,7 +358,7 @@ public class Route4ReleaseEngineAdminController : ControllerBase
                 .ThenInclude(dc => dc.Roles)
             .FirstOrDefaultAsync(c => c.Slug == clientSlug && c.IsActive);
 
-        if (client?.DiscordConfiguration == null)
+        if (client == null || client.DiscordConfiguration == null)
             return NotFound(new { error = "Discord configuration not found" });
 
         var review = new DiscordClientReviewDto
@@ -395,7 +395,7 @@ public class Route4ReleaseEngineAdminController : ControllerBase
                 .ThenInclude(dc => dc.Roles)
             .FirstOrDefaultAsync(c => c.Slug == clientSlug && c.IsActive);
 
-        if (client?.DiscordConfiguration == null)
+        if (client == null || client.DiscordConfiguration == null)
             return NotFound(new { error = "Discord configuration not found" });
 
         // Apply any channel renames

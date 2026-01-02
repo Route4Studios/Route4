@@ -8,6 +8,7 @@ public class Client
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool IsActive { get; set; }
+    
     public ICollection<SplashPage> SplashPages { get; set; } = new List<SplashPage>();
     
     // Route4 Architecture Navigation

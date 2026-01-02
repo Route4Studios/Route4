@@ -127,7 +127,7 @@ public class RealDiscordBotService : IDiscordBotService
                 }
                 else
                 {
-                    _logger.LogInformation("Successfully validated access to guild {GuildName} ({GuildId})", guild.Name, guildId);
+                    _logger.LogInformation("Successfully validated access to guild {GuildName} ({GuildId})", guild?.Name ?? "Unknown", guildId);
                 }
                 
                 return hasAccess;
@@ -145,7 +145,7 @@ public class RealDiscordBotService : IDiscordBotService
         }
     }
 
-    public async Task<string> CreateServerAsync(string serverName, string? iconUrl = null)
+    public Task<string> CreateServerAsync(string serverName, string? iconUrl = null)
     {
         _logger.LogError("Discord API Limitation: Bots cannot create servers. Server '{ServerName}' must be created manually.", serverName);
         

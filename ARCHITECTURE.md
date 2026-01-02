@@ -43,7 +43,7 @@
                      │
                      ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  Entity Framework Core 9 (In-Memory Database)               │
+│  Entity Framework Core 9 (SQL Server Database)               │
 │  - Client table (name, slug, created_at)                    │
 │  - SplashPage table (title, subtitle, description, etc.)    │
 │  - Benefit table (icon, title, description, display_order)  │
@@ -59,7 +59,7 @@
 ### Backend
 - **Framework**: ASP.NET Core 9 Web API
 - **ORM**: Entity Framework Core 9
-- **Database**: In-Memory (development), SQL Server (migration planned)
+- **Database**: SQL Server
 - **Language**: C#
 - **Features**: CORS, Multi-tenant Middleware, Seed Data
 
@@ -440,12 +440,12 @@ ClientApp/public/assets/clients/
 ### Development
 - Frontend: `ng serve --port 4200`
 - Backend: `dotnet run`
-- Database: In-memory (EF Core)
+- Database: SQL Server (local or configured connection)
 
-### Production (Planned)
+### Production
 - Frontend: Build Angular app and deploy to static hosting (Azure Blob Storage, S3, etc.)
 - Backend: Deploy .NET API to Azure App Service or similar
-- Database: Migrate to SQL Server
+- Database: SQL Server (Azure SQL Database or similar)
 - Assets: Use CDN for cover images and client assets
 - SSL/TLS: Enable HTTPS
 
