@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Route4MoviePlug.Api.Data;
 using Route4MoviePlug.Api.Models;
+using Route4MoviePlug.Api.Services.Discord;
 
 namespace Route4MoviePlug.Api.Controllers;
 
@@ -11,29 +12,77 @@ public class ClientsController : ControllerBase
 {
     private readonly Route4DbContext _context;
     private readonly ILogger<ClientsController> _logger;
+    private readonly IDiscordBotService _discordBot;
+    private readonly IConfiguration _configuration;
 
-    public ClientsController(Route4DbContext context, ILogger<ClientsController> logger)
+    public ClientsController(
+        Route4DbContext context, 
+        ILogger<ClientsController> logger,
+        IDiscordBotService discordBot,
+        IConfiguration configuration)
     {
         _context = context;
         _logger = logger;
+        _discordBot = discordBot;
+        _configuration = configuration;
     }
 
+    /// <summary>
+    /// Get all clients from Discord - Discord is the source of truth
+    /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetClients()
     {
-        var clients = await _context.Clients
-            .Where(c => c.IsActive)
-            .Select(c => new
+        try
+        {
+            // Get bot token from configuration
+            var botToken = _configuration["Discord:BotToken"];
+            if (string.IsNullOrEmpty(botToken))
             {
-                c.Id,
-                c.Name,
-                c.Slug,
-                c.Description,
-                c.CreatedAt
-            })
-            .ToListAsync();
+                return BadRequest(new { error = "Discord bot token not configured" });
+            }
 
-        return Ok(clients);
+            // Get all Discord guilds the bot has access to (source of truth)
+            var guilds = await _discordBot.GetAllGuildsAsync(botToken);
+            
+            // Map to client-like structure
+            // In the future, you might match guild names to client slugs from DB
+            var clients = guilds.Select(guild => new
+            {
+                Id = guild.GuildId,
+                Name = guild.Name,
+                Slug = System.Text.RegularExpressions.Regex.Replace(
+                    guild.Name.ToLower()
+                        .Replace("route4", "")
+                        .Replace(" - ", "-")
+                        .Replace(" ", "-")
+                        .Replace("(mock)", "")
+                        .Replace("--", "-")
+                        .Trim('-'),
+                    @"-+", "-"),
+                Description = $"Discord server with {guild.MemberCount} members",
+                CreatedAt = guild.CreatedAt,
+                IsActive = true,
+                DiscordConfiguration = new
+                {
+                    GuildId = guild.GuildId,
+                    IsActive = true,
+                    ChannelCount = guild.ChannelCount,
+                    RoleCount = guild.RoleCount,
+                    UpdatedAt = (DateTime?)null,
+                    IconUrl = guild.IconUrl,
+                    MemberCount = guild.MemberCount
+                }
+            }).ToList();
+
+            _logger.LogInformation("Retrieved {Count} Discord guilds as clients", clients.Count);
+            return Ok(clients);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch clients from Discord");
+            return StatusCode(500, new { error = "Failed to fetch clients from Discord" });
+        }
     }
 
     [HttpGet("{slug}")]

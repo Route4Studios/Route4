@@ -91,6 +91,26 @@ public class MockDiscordBotService : IDiscordBotService
         return true;
     }
 
+    public async Task<List<DiscordGuildInfo>> GetAllGuildsAsync(string botToken)
+    {
+        _logger.LogInformation("Mock: Fetching all Discord guilds");
+        await Task.Delay(100);
+        
+        return new List<DiscordGuildInfo>
+        {
+            new DiscordGuildInfo
+            {
+                GuildId = "1234567890",
+                Name = "Route4 - Making of MARY (Mock)",
+                IconUrl = "",
+                MemberCount = 42,
+                ChannelCount = 15,
+                RoleCount = 3,
+                CreatedAt = DateTime.UtcNow.AddDays(-30)
+            }
+        };
+    }
+
     public async Task<DiscordChannelResult> ProvisionChannelTemplatesAsync(string guildId, DiscordChannelTemplateSet templates)
     {
         try

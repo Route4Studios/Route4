@@ -197,6 +197,42 @@ public class RealDiscordBotService : IDiscordBotService
         }
     }
 
+    public async Task<List<DiscordGuildInfo>> GetAllGuildsAsync(string botToken)
+    {
+        _logger.LogInformation("Fetching all Discord guilds from Discord.NET");
+        
+        try
+        {
+            var client = await GetConnectedClientAsync(botToken);
+            
+            var guilds = new List<DiscordGuildInfo>();
+            
+            foreach (var guild in client.Guilds)
+            {
+                guilds.Add(new DiscordGuildInfo
+                {
+                    GuildId = guild.Id.ToString(),
+                    Name = guild.Name,
+                    IconUrl = guild.IconUrl ?? "",
+                    MemberCount = guild.MemberCount,
+                    ChannelCount = guild.Channels.Count,
+                    RoleCount = guild.Roles.Count,
+                    CreatedAt = guild.CreatedAt.DateTime
+                });
+                
+                _logger.LogInformation("Found guild: {GuildName} ({GuildId}) - {ChannelCount} channels, {RoleCount} roles", 
+                    guild.Name, guild.Id, guild.Channels.Count, guild.Roles.Count);
+            }
+            
+            return guilds;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch Discord guilds");
+            return new List<DiscordGuildInfo>();
+        }
+    }
+
     public async Task<DiscordChannelResult> ProvisionChannelTemplatesAsync(string guildId, DiscordChannelTemplateSet templates)
     {
         _logger.LogInformation("Provisioning channel templates for guild {GuildId} using real Discord API", guildId);

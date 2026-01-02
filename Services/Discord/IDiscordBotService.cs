@@ -10,6 +10,7 @@ public interface IDiscordBotService
     Task<bool> ValidateServerAccessAsync(string guildId, string botToken);
     Task<string> CreateServerAsync(string serverName, string? iconUrl = null);
     Task<bool> SetApplicationImageAsync(string botToken, string imageUrl);
+    Task<List<DiscordGuildInfo>> GetAllGuildsAsync(string botToken);
     
     // Channel Management - Template-based provisioning
     Task<DiscordChannelResult> ProvisionChannelTemplatesAsync(string guildId, DiscordChannelTemplateSet templates);
@@ -107,4 +108,15 @@ public class DiscordRoleMapping
     public required string Type { get; set; }
     public required string RoleId { get; set; }
     public required string Name { get; set; }
+}
+
+public class DiscordGuildInfo
+{
+    public required string GuildId { get; set; }
+    public required string Name { get; set; }
+    public required string IconUrl { get; set; }
+    public int MemberCount { get; set; }
+    public int ChannelCount { get; set; }
+    public int RoleCount { get; set; }
+    public required DateTime CreatedAt { get; set; }
 }
