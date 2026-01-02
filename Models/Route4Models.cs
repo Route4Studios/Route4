@@ -194,3 +194,120 @@ public class DiscordRole
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
+
+/// <summary>
+/// Ritual Mapping - Phase 4: Maps rituals to channels, visibility, and automation
+/// Defines the behavior, automation, and Discord state for each ritual stage
+/// </summary>
+public class RitualMapping
+{
+    public Guid Id { get; set; }
+    public Guid ClientId { get; set; }
+    public Client? Client { get; set; }
+    public Guid ReleaseCycleTemplateId { get; set; }
+    public ReleaseCycleTemplate? ReleaseCycleTemplate { get; set; }
+    
+    public required string RitualName { get; set; } // "Signal", "Hold", "Drop", "Echo", "Fragments", etc.
+    public required string StageType { get; set; } // Maps to ReleaseStageTemplate.Type
+    public string? Description { get; set; }
+    public int ExecutionOrder { get; set; }
+    
+    // Channel Mapping
+    public required string TargetChannelPurpose { get; set; } // "signal", "releases", "reflection", "process", etc.
+    public string? TargetChannelId { get; set; } // Populated from DiscordChannel after provisioning
+    
+    // Visibility & Access
+    public required string VisibilityLevel { get; set; } // L0, L1, L2, L3
+    public string[]? RequiredRoles { get; set; } // Roles that can access during this ritual
+    public bool IsReadOnly { get; set; }
+    
+    // Timing & Duration
+    public int? DefaultDurationHours { get; set; } // How long channel stays open
+    public string? OpenTrigger { get; set; } // Manual, ScheduledTime, PreviousStageCompleted
+    public string? CloseTrigger { get; set; } // Manual, DurationExpired, NextStageStart
+    
+    // Discord Automation
+    public bool AutomaticallyUnlockChannel { get; set; } // Unlock on stage entry
+    public bool AutomaticallyLockChannel { get; set; } // Lock on stage exit
+    public string? SlowModeSeconds { get; set; } // Discord slow mode during reflection
+    public bool DisableFileUploads { get; set; }
+    public bool DisableExternalEmojis { get; set; }
+    
+    // Narrative/UX
+    public string? AnnouncementMessage { get; set; } // Pinned message when channel opens
+    public string? ClosingMessage { get; set; } // Message when channel closes
+    public bool IsAnonymous { get; set; } // For Signal: hide poster identity
+    
+    // Sequencing
+    public bool CanBeSkipped { get; set; }
+    public string? NotesForAdmin { get; set; }
+    
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Release Stage State Transition - Logs state transitions for audit and automation
+/// </summary>
+public class ReleaseStateTransition
+{
+    public Guid Id { get; set; }
+    public Guid ReleaseInstanceId { get; set; }
+    public ReleaseInstance? ReleaseInstance { get; set; }
+    
+    public required string FromStage { get; set; }
+    public required string ToStage { get; set; }
+    public required string TransitionReason { get; set; } // "Manual", "AutoAdvance", "SkipStage"
+    
+    public string? DiscordChannelsOpened { get; set; } // JSON array of channel IDs
+    public string? DiscordChannelsLocked { get; set; } // JSON array of channel IDs
+    public string? AnnouncementSent { get; set; } // Message sent to Discord
+    
+    public Guid? TriggeredBy { get; set; } // Admin user ID
+    public DateTime OccurredAt { get; set; }
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Release State Machine - Defines allowed transitions and validates state progression
+/// </summary>
+public static class ReleaseStateMachine
+{
+    // Valid state transitions for Mary (and default for all clients)
+    public static readonly Dictionary<string, HashSet<string>> ValidTransitions = new()
+    {
+        { "Draft", new() { "Scheduled", "Archived" } },
+        { "Scheduled", new() { "Signal", "Archived" } },
+        { "Signal", new() { "Process", "Archived" } },
+        { "Process", new() { "Hold", "Archived" } },
+        { "Hold", new() { "Drop", "Archived" } },
+        { "Drop", new() { "Echo", "Archived" } },
+        { "Echo", new() { "Fragments", "Archived" } },
+        { "Fragments", new() { "Interval", "Archived" } },
+        { "Interval", new() { "PrivateViewing", "Archived" } },
+        { "PrivateViewing", new() { "Archive", "Archived" } },
+        { "Archive", new() { "Archived" } },
+        { "Archived", new() { } }
+    };
+    
+    public static bool IsValidTransition(string fromStage, string toStage)
+    {
+        return ValidTransitions.TryGetValue(fromStage, out var allowedNextStates) &&
+               allowedNextStates.Contains(toStage);
+    }
+    
+    // Ritual stages (Mary-specific implementation)
+    public static readonly List<string> MaryRitualSequence = new()
+    {
+        "Signal",       // Pre-Artifact (Anonymous song drop)
+        "Process",      // Writing Table, Shot Council, etc.
+        "Hold",         // Intentional silence
+        "Drop",         // Primary Release
+        "Echo",         // Reflection
+        "Fragments",    // BTS residue
+        "Interval",     // Podcast
+        "PrivateViewing", // Witness-only
+        "Archive"       // Permanent record
+    };
+}

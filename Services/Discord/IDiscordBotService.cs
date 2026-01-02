@@ -12,9 +12,11 @@ public interface IDiscordBotService
     
     // Channel Management - Template-based provisioning
     Task<DiscordChannelResult> ProvisionChannelTemplatesAsync(string guildId, DiscordChannelTemplateSet templates);
-    Task<bool> LockChannelAsync(string guildId, string channelId);
-    Task<bool> UnlockChannelAsync(string guildId, string channelId);
+    Task<bool> LockChannelAsync(string guildId, string channelId, string botToken);
+    Task<bool> UnlockChannelAsync(string guildId, string channelId, string botToken);
     Task<bool> SetChannelReadOnlyAsync(string guildId, string channelId, bool readOnly);
+    Task<bool> SetSlowModeAsync(string guildId, string channelId, int seconds, string botToken);
+    Task<bool> SendMessageAsync(string guildId, string channelId, string message, string botToken);
     
     // Role Management
     Task<DiscordRoleResult> CreateRolesAsync(string guildId, DiscordRoleTemplateSet roles);

@@ -25,6 +25,8 @@ public class Route4DbContext : DbContext
     public DbSet<ReleaseStageExecution> ReleaseStageExecutions { get; set; }
     public DbSet<ReleaseArtifact> ReleaseArtifacts { get; set; }
     public DbSet<WitnessEvent> WitnessEvents { get; set; }
+    public DbSet<RitualMapping> RitualMappings { get; set; }
+    public DbSet<ReleaseStateTransition> ReleaseStateTransitions { get; set; }
     public DbSet<DiscordConfiguration> DiscordConfigurations { get; set; }
     public DbSet<DiscordChannel> DiscordChannels { get; set; }
     public DbSet<DiscordRole> DiscordRoles { get; set; }
@@ -119,7 +121,7 @@ public class Route4DbContext : DbContext
             entity.HasOne(e => e.Client)
                 .WithMany()
                 .HasForeignKey(e => e.ClientId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.NoAction); // Changed from Cascade to prevent cycle
             
             entity.HasOne(e => e.MembershipTier)
                 .WithMany()
@@ -300,6 +302,276 @@ public class Route4DbContext : DbContext
                 ConnectedAt = DateTime.UtcNow
             }
         );
+
+        // Seed Mary's Release Cycle Template
+        var maryReleaseCycleId = Guid.NewGuid();
+        modelBuilder.Entity<ReleaseCycleTemplate>().HasData(
+            new ReleaseCycleTemplate
+            {
+                Id = maryReleaseCycleId,
+                ClientId = makingOfMaryId,
+                Name = "Mary Episode Release Cycle",
+                Description = "Full ritual sequence for Making of Mary episodes",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            }
+        );
+
+        // Seed Mary's Ritual Mappings - Phase 4 Implementation
+        modelBuilder.Entity<RitualMapping>().HasData(
+            new RitualMapping
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                ReleaseCycleTemplateId = maryReleaseCycleId,
+                RitualName = "Signal",
+                StageType = "Signal",
+                Description = "Anonymous pre-artifact song drop",
+                ExecutionOrder = 1,
+                TargetChannelPurpose = "signal",
+                VisibilityLevel = "L2",
+                RequiredRoles = null,
+                IsReadOnly = true,
+                DefaultDurationHours = null,
+                OpenTrigger = "Manual",
+                CloseTrigger = "Manual",
+                AutomaticallyUnlockChannel = true,
+                AutomaticallyLockChannel = false,
+                SlowModeSeconds = null,
+                DisableFileUploads = false,
+                DisableExternalEmojis = false,
+                AnnouncementMessage = "🔊 **THE SIGNAL** — A new artifact has dropped. No context. No explanation. Just presence.",
+                ClosingMessage = null,
+                IsAnonymous = true,
+                CanBeSkipped = false,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new RitualMapping
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                ReleaseCycleTemplateId = maryReleaseCycleId,
+                RitualName = "Process",
+                StageType = "Process",
+                Description = "Witness-only process rooms (Writing Table, Shot Council, etc.)",
+                ExecutionOrder = 2,
+                TargetChannelPurpose = "process",
+                VisibilityLevel = "L1",
+                RequiredRoles = new[] { "CoreTeam", "Witness" },
+                IsReadOnly = false,
+                DefaultDurationHours = 3,
+                OpenTrigger = "Manual",
+                CloseTrigger = "DurationExpired",
+                AutomaticallyUnlockChannel = true,
+                AutomaticallyLockChannel = true,
+                SlowModeSeconds = "10",
+                DisableFileUploads = true,
+                DisableExternalEmojis = false,
+                AnnouncementMessage = "⚒️ **PROCESS OPEN** — The room is now open. Decisions, not outcomes. Craft, not results.",
+                ClosingMessage = "✅ Process session complete. The room is now closed.",
+                IsAnonymous = false,
+                CanBeSkipped = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new RitualMapping
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                ReleaseCycleTemplateId = maryReleaseCycleId,
+                RitualName = "Hold",
+                StageType = "Hold",
+                Description = "Intentional silence before the drop",
+                ExecutionOrder = 3,
+                TargetChannelPurpose = "signal",
+                VisibilityLevel = "L2",
+                RequiredRoles = null,
+                IsReadOnly = true,
+                DefaultDurationHours = 24,
+                OpenTrigger = "PreviousStageCompleted",
+                CloseTrigger = "DurationExpired",
+                AutomaticallyUnlockChannel = false,
+                AutomaticallyLockChannel = false,
+                SlowModeSeconds = null,
+                DisableFileUploads = false,
+                DisableExternalEmojis = false,
+                AnnouncementMessage = null,
+                ClosingMessage = null,
+                IsAnonymous = false,
+                CanBeSkipped = false,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new RitualMapping
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                ReleaseCycleTemplateId = maryReleaseCycleId,
+                RitualName = "Drop",
+                StageType = "Drop",
+                Description = "Primary episode release",
+                ExecutionOrder = 4,
+                TargetChannelPurpose = "releases",
+                VisibilityLevel = "L3",
+                RequiredRoles = null,
+                IsReadOnly = true,
+                DefaultDurationHours = 24,
+                OpenTrigger = "ScheduledTime",
+                CloseTrigger = "DurationExpired",
+                AutomaticallyUnlockChannel = true,
+                AutomaticallyLockChannel = true,
+                SlowModeSeconds = null,
+                DisableFileUploads = false,
+                DisableExternalEmojis = false,
+                AnnouncementMessage = "📺 **THE DROP** — The episode is here. Read-only for 24 hours. Experience it first.",
+                ClosingMessage = "The 24-hour window has closed. Reflection begins.",
+                IsAnonymous = false,
+                CanBeSkipped = false,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new RitualMapping
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                ReleaseCycleTemplateId = maryReleaseCycleId,
+                RitualName = "Echo",
+                StageType = "Echo",
+                Description = "Post-drop reflection (no spoilers, no theories)",
+                ExecutionOrder = 5,
+                TargetChannelPurpose = "reflection",
+                VisibilityLevel = "L3",
+                RequiredRoles = new[] { "Witness", "Member" },
+                IsReadOnly = false,
+                DefaultDurationHours = 72,
+                OpenTrigger = "PreviousStageCompleted",
+                CloseTrigger = "Manual",
+                AutomaticallyUnlockChannel = true,
+                AutomaticallyLockChannel = false,
+                SlowModeSeconds = "30",
+                DisableFileUploads = true,
+                DisableExternalEmojis = false,
+                AnnouncementMessage = "💬 **ECHO** — Reflection is open. What did you notice? No spoilers. No theories. Only presence.",
+                ClosingMessage = null,
+                IsAnonymous = false,
+                CanBeSkipped = false,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new RitualMapping
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                ReleaseCycleTemplateId = maryReleaseCycleId,
+                RitualName = "Fragments",
+                StageType = "Fragments",
+                Description = "BTS residue and artifacts",
+                ExecutionOrder = 6,
+                TargetChannelPurpose = "fragments",
+                VisibilityLevel = "L2",
+                RequiredRoles = new[] { "CoreTeam" },
+                IsReadOnly = true,
+                DefaultDurationHours = null,
+                OpenTrigger = "Manual",
+                CloseTrigger = null,
+                AutomaticallyUnlockChannel = false,
+                AutomaticallyLockChannel = false,
+                SlowModeSeconds = null,
+                DisableFileUploads = false,
+                DisableExternalEmojis = false,
+                AnnouncementMessage = "🎬 **FRAGMENTS** — Behind-the-scenes residue. No context. Just artifacts.",
+                ClosingMessage = null,
+                IsAnonymous = false,
+                CanBeSkipped = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new RitualMapping
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                ReleaseCycleTemplateId = maryReleaseCycleId,
+                RitualName = "Interval",
+                StageType = "Interval",
+                Description = "Podcast and meta reflection",
+                ExecutionOrder = 7,
+                TargetChannelPurpose = "interval",
+                VisibilityLevel = "L3",
+                RequiredRoles = null,
+                IsReadOnly = true,
+                DefaultDurationHours = null,
+                OpenTrigger = "Manual",
+                CloseTrigger = null,
+                AutomaticallyUnlockChannel = true,
+                AutomaticallyLockChannel = false,
+                SlowModeSeconds = null,
+                DisableFileUploads = false,
+                DisableExternalEmojis = false,
+                AnnouncementMessage = "🎙️ **INTERVAL** — Meta reflection podcast is live.",
+                ClosingMessage = null,
+                IsAnonymous = false,
+                CanBeSkipped = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new RitualMapping
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                ReleaseCycleTemplateId = maryReleaseCycleId,
+                RitualName = "PrivateViewing",
+                StageType = "PrivateViewing",
+                Description = "Witness-only private screening",
+                ExecutionOrder = 8,
+                TargetChannelPurpose = "invitations",
+                VisibilityLevel = "L1",
+                RequiredRoles = new[] { "Witness" },
+                IsReadOnly = true,
+                DefaultDurationHours = null,
+                OpenTrigger = "Manual",
+                CloseTrigger = null,
+                AutomaticallyUnlockChannel = false,
+                AutomaticallyLockChannel = false,
+                SlowModeSeconds = null,
+                DisableFileUploads = false,
+                DisableExternalEmojis = false,
+                AnnouncementMessage = "🎟️ **PRIVATE VIEWING** — Invitations for Witness-only screening have been sent.",
+                ClosingMessage = null,
+                IsAnonymous = false,
+                CanBeSkipped = true,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            new RitualMapping
+            {
+                Id = Guid.NewGuid(),
+                ClientId = makingOfMaryId,
+                ReleaseCycleTemplateId = maryReleaseCycleId,
+                RitualName = "Archive",
+                StageType = "Archive",
+                Description = "Permanent record and canon",
+                ExecutionOrder = 9,
+                TargetChannelPurpose = "releases",
+                VisibilityLevel = "L3",
+                RequiredRoles = null,
+                IsReadOnly = true,
+                DefaultDurationHours = null,
+                OpenTrigger = "PreviousStageCompleted",
+                CloseTrigger = null,
+                AutomaticallyUnlockChannel = false,
+                AutomaticallyLockChannel = false,
+                SlowModeSeconds = null,
+                DisableFileUploads = false,
+                DisableExternalEmojis = false,
+                AnnouncementMessage = null,
+                ClosingMessage = null,
+                IsAnonymous = false,
+                CanBeSkipped = false,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            }
+        );
     }
 
     private void ConfigureRoute4Models(ModelBuilder modelBuilder)
@@ -451,5 +723,53 @@ public class Route4DbContext : DbContext
                 .HasForeignKey(e => e.DiscordConfigurationId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        // Ritual Mapping - Phase 4
+        modelBuilder.Entity<RitualMapping>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RitualName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.StageType).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TargetChannelPurpose).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TargetChannelId).HasMaxLength(50);
+            entity.Property(e => e.VisibilityLevel).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.AnnouncementMessage).HasMaxLength(2000);
+            entity.Property(e => e.ClosingMessage).HasMaxLength(2000);
+            entity.Property(e => e.NotesForAdmin).HasMaxLength(1000);
+            
+            entity.HasOne(e => e.Client)
+                .WithMany()
+                .HasForeignKey(e => e.ClientId)
+                .OnDelete(DeleteBehavior.NoAction); // Changed to prevent cascade cycle
+            
+            entity.HasOne(e => e.ReleaseCycleTemplate)
+                .WithMany()
+                .HasForeignKey(e => e.ReleaseCycleTemplateId)
+                .OnDelete(DeleteBehavior.NoAction); // Changed to prevent cascade cycle
+            
+            entity.HasIndex(e => new { e.ClientId, e.ReleaseCycleTemplateId, e.RitualName }).IsUnique();
+        });
+
+        // Release State Transition - Audit trail
+        modelBuilder.Entity<ReleaseStateTransition>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FromStage).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ToStage).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TransitionReason).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.DiscordChannelsOpened).HasMaxLength(2000);
+            entity.Property(e => e.DiscordChannelsLocked).HasMaxLength(2000);
+            entity.Property(e => e.AnnouncementSent).HasMaxLength(2000);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+            
+            entity.HasOne(e => e.ReleaseInstance)
+                .WithMany()
+                .HasForeignKey(e => e.ReleaseInstanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasIndex(e => e.ReleaseInstanceId);
+            entity.HasIndex(e => e.OccurredAt);
+        });
     }
+
 }

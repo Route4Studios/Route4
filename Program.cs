@@ -10,9 +10,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// Add DbContext with In-Memory database for now
+// Add DbContext with SQL Server
 builder.Services.AddDbContext<Route4DbContext>(options =>
-    options.UseInMemoryDatabase("Route4Studios"));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add Stripe configuration
 var stripeSettings = new StripeSettings
@@ -35,6 +35,9 @@ var discordSettings = new DiscordSettings
 };
 builder.Configuration.GetSection("Discord").Bind(discordSettings);
 builder.Services.AddSingleton(discordSettings);
+
+// Add Route4 Release Management Service
+builder.Services.AddScoped<IReleaseManagementService, ReleaseManagementService>();
 
 // Add Route4 Discord service - conditional based on configuration
 builder.Services.AddSingleton<IDiscordBotService>(serviceProvider =>
@@ -71,13 +74,17 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Seed database
+// Initialize database
 try
 {
     using (var scope = app.Services.CreateScope())
     {
         var context = scope.ServiceProvider.GetRequiredService<Route4DbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        // Create database if it doesn't exist
         context.Database.EnsureCreated();
+        logger.LogInformation("Database initialized successfully");
     }
 }
 catch (Exception ex)

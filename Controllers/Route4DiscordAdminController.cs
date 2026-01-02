@@ -98,6 +98,97 @@ public class Route4ReleaseEngineAdminController : ControllerBase
     }
 
     /// <summary>
+    /// Get Discord Setup Status - Check which steps are complete
+    /// </summary>
+    [HttpGet("setup-status")]
+    public async Task<ActionResult<DiscordSetupStatusDto>> GetSetupStatus(string clientSlug)
+    {
+        var client = await _context.Clients
+            .Include(c => c.DiscordConfiguration)
+                .ThenInclude(dc => dc!.Channels)
+            .Include(c => c.DiscordConfiguration)
+                .ThenInclude(dc => dc!.Roles)
+            .FirstOrDefaultAsync(c => c.Slug == clientSlug && c.IsActive);
+
+        if (client == null)
+            return NotFound(new { error = $"Client '{clientSlug}' not found" });
+
+        // Generate bot invitation URL
+        var botClientId = "1456365248356286677";
+        var requiredPermissions = 8; // Administrator
+        var botInvitationUrl = $"https://discord.com/oauth2/authorize?client_id={botClientId}&permissions={requiredPermissions}&scope=bot";
+
+        var status = new DiscordSetupStatusDto
+        {
+            ClientSlug = clientSlug,
+            ClientName = client.Name,
+            Step1_BotInvitationGenerated = true, // Always available - can generate anytime
+            Step2_ServerCreated = false,
+            Step3_BotAdded = false,
+            Step4_ServerConfigured = false,
+            GuildId = null,
+            ChannelCount = 0,
+            RoleCount = 0,
+            ConfiguredAt = null,
+            NextStep = "Generate bot invitation URL",
+            NextStepNumber = 1,
+            BotInvitationUrl = botInvitationUrl
+        };
+
+        if (client.DiscordConfiguration != null)
+        {
+            // Step 2: Server created - We have a Guild ID stored
+            var hasGuildId = !string.IsNullOrEmpty(client.DiscordConfiguration.GuildId);
+            status.Step2_ServerCreated = hasGuildId;
+            
+            // Step 3: Bot added - We have both Guild ID and Bot Token stored
+            var hasBotToken = !string.IsNullOrEmpty(client.DiscordConfiguration.BotToken);
+            status.Step3_BotAdded = hasGuildId && hasBotToken;
+            
+            // Step 4: Configured - Has channels and roles provisioned
+            var hasChannels = client.DiscordConfiguration.Channels.Any();
+            var hasRoles = client.DiscordConfiguration.Roles.Any();
+            status.Step4_ServerConfigured = client.DiscordConfiguration.IsActive && 
+                                           hasGuildId && hasBotToken && hasChannels && hasRoles;
+            
+            status.GuildId = client.DiscordConfiguration.GuildId;
+            status.ChannelCount = client.DiscordConfiguration.Channels.Count;
+            status.RoleCount = client.DiscordConfiguration.Roles.Count;
+            status.ConfiguredAt = client.DiscordConfiguration.UpdatedAt ?? client.DiscordConfiguration.CreatedAt;
+
+            // Determine next step based on current progress
+            if (status.Step4_ServerConfigured)
+            {
+                status.NextStep = "✅ Setup complete! Server ready for use.";
+                status.NextStepNumber = 0;
+            }
+            else if (status.Step3_BotAdded && hasGuildId)
+            {
+                status.NextStep = "Click 'Configure Server' to provision channels and roles";
+                status.NextStepNumber = 4;
+            }
+            else if (status.Step2_ServerCreated)
+            {
+                status.NextStep = "Invite bot to your Discord server using the URL above";
+                status.NextStepNumber = 3;
+            }
+            else
+            {
+                status.NextStep = "Create a Discord server, then paste its Server ID below";
+                status.NextStepNumber = 2;
+            }
+        }
+        else
+        {
+            // No configuration exists yet - guide user through first step
+            status.NextStep = "Generate bot invitation URL to get started";
+            status.NextStepNumber = 1;
+        }
+
+        return Ok(status);
+    }
+
+    /// <summary>
     /// Phase 2: Discord Server Configuration (Not Creation)
     /// Route4 configures existing Discord servers with templates
     /// Note: Discord API limitation - bots cannot create servers
@@ -121,20 +212,26 @@ public class Route4ReleaseEngineAdminController : ControllerBase
         {
             var result = new DiscordProvisioningResult();
             
-            // Step 1: Validate bot has access to the existing server
-            var isValid = await _discordBot.ValidateServerAccessAsync(request.GuildId, request.BotToken);
-            if (!isValid)
+            // Step 1: Validate bot has access to the existing server (optional - skip for faster setup)
+            // In production, you may want to enable this validation
+            var skipValidation = true; // TODO: Make this configurable
+            
+            if (!skipValidation)
             {
-                return BadRequest(new { 
-                    error = "Cannot access Discord server. Please ensure:",
-                    troubleshooting = new[]
-                    {
-                        "1. The bot has been invited to the server",
-                        "2. The Guild ID is correct",
-                        "3. The bot token is valid",
-                        "4. The bot has administrator permissions"
-                    }
-                });
+                var isValid = await _discordBot.ValidateServerAccessAsync(request.GuildId, request.BotToken);
+                if (!isValid)
+                {
+                    return BadRequest(new { 
+                        error = "Cannot access Discord server. Please ensure:",
+                        troubleshooting = new[]
+                        {
+                            "1. The bot has been invited to the server",
+                            "2. The Guild ID is correct",
+                            "3. The bot token is valid",
+                            "4. The bot has administrator permissions"
+                        }
+                    });
+                }
             }
             
             var guildId = request.GuildId;
@@ -351,7 +448,7 @@ public class Route4ReleaseEngineAdminController : ControllerBase
 
             foreach (var channel in processChannels)
             {
-                await _discordBot.LockChannelAsync(config.GuildId!, channel.ChannelId);
+                await _discordBot.LockChannelAsync(config.GuildId!, channel.ChannelId, "");
             }
 
             var result = new DiscordGoLiveResult

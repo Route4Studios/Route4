@@ -174,7 +174,7 @@ public class MockDiscordBotService : IDiscordBotService
         }
     }
 
-    public async Task<bool> LockChannelAsync(string guildId, string channelId)
+    public async Task<bool> LockChannelAsync(string guildId, string channelId, string botToken)
     {
         try
         {
@@ -195,7 +195,7 @@ public class MockDiscordBotService : IDiscordBotService
         }
     }
 
-    public async Task<bool> UnlockChannelAsync(string guildId, string channelId)
+    public async Task<bool> UnlockChannelAsync(string guildId, string channelId, string botToken)
     {
         try
         {
@@ -223,11 +223,11 @@ public class MockDiscordBotService : IDiscordBotService
             
             if (readOnly)
             {
-                return await LockChannelAsync(guildId, channelId);
+                return await LockChannelAsync(guildId, channelId, "");
             }
             else
             {
-                return await UnlockChannelAsync(guildId, channelId);
+                return await UnlockChannelAsync(guildId, channelId, "");
             }
         }
         catch (Exception ex)
@@ -307,7 +307,7 @@ public class MockDiscordBotService : IDiscordBotService
             // Route4 Architecture: Return process room to locked state
             // Process rooms are closed when ritual session ends
             
-            return await LockChannelAsync(guildId, channelId);
+            return await LockChannelAsync(guildId, channelId, "");
         }
         catch (Exception ex)
         {
@@ -348,7 +348,7 @@ public class MockDiscordBotService : IDiscordBotService
             _logger.LogInformation($"Ending release window for channel {channelId}");
             
             // Route4 Architecture: End of read-only period, allow reflection
-            return await UnlockChannelAsync(guildId, channelId);
+            return await UnlockChannelAsync(guildId, channelId, "");
         }
         catch (Exception ex)
         {
@@ -395,6 +395,53 @@ public class MockDiscordBotService : IDiscordBotService
         catch (Exception ex)
         {
             _logger.LogError($"Failed to revoke invite: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Set slow mode (rate limiting) on a channel
+    /// </summary>
+    public async Task<bool> SetSlowModeAsync(string guildId, string channelId, int seconds, string botToken)
+    {
+        try
+        {
+            _logger.LogInformation($"Setting slow mode {seconds}s on channel {channelId}");
+            
+            // In real implementation:
+            // 1. Use Discord.Net to update channel rate limit per user
+            // 2. Use botToken for authentication
+            
+            await Task.CompletedTask; // Mock operation
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to set slow mode: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Send a message to a Discord channel
+    /// </summary>
+    public async Task<bool> SendMessageAsync(string guildId, string channelId, string message, string botToken)
+    {
+        try
+        {
+            _logger.LogInformation($"Sending message to channel {channelId} in guild {guildId}");
+            
+            // In real implementation:
+            // 1. Use Discord.Net or HTTP API to send message
+            // 2. Use botToken for authentication
+            // 3. Handle message embeds, mentions, etc.
+            
+            await Task.CompletedTask; // Mock operation
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Failed to send message: {ex.Message}");
             return false;
         }
     }

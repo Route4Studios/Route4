@@ -49,6 +49,23 @@ public class DiscordBotInvitationDto
     public required string[] Instructions { get; set; }
 }
 
+public class DiscordSetupStatusDto
+{
+    public required string ClientSlug { get; set; }
+    public required string ClientName { get; set; }
+    public bool Step1_BotInvitationGenerated { get; set; }
+    public bool Step2_ServerCreated { get; set; }
+    public bool Step3_BotAdded { get; set; }
+    public bool Step4_ServerConfigured { get; set; }
+    public string? GuildId { get; set; }
+    public int ChannelCount { get; set; }
+    public int RoleCount { get; set; }
+    public DateTime? ConfiguredAt { get; set; }
+    public required string NextStep { get; set; }
+    public int NextStepNumber { get; set; }
+    public string? BotInvitationUrl { get; set; } // Include the URL so UI doesn't need to regenerate
+}
+
 public class DiscordProvisioningResult
 {
     public bool Success { get; set; }
