@@ -10,6 +10,7 @@ public class Client
     public bool IsActive { get; set; }
     
     public ICollection<SplashPage> SplashPages { get; set; } = new List<SplashPage>();
+    public ICollection<CastingCall> CastingCalls { get; set; } = new List<CastingCall>();
     
     // Route4 Architecture Navigation
     public DiscordConfiguration? DiscordConfiguration { get; set; }
@@ -40,6 +41,38 @@ public class Benefit
     public required string Title { get; set; }
     public required string Description { get; set; }
     public int DisplayOrder { get; set; }
+}
+
+// Signal I — Casting Call (L2 Visibility - Public)
+public class CastingCall
+{
+    public Guid Id { get; set; }
+    public Guid ClientId { get; set; }
+    public Client? Client { get; set; }
+    public required string Title { get; set; }
+    public required string ProjectStatus { get; set; }
+    public required string ToneAndIntent { get; set; }
+    public required string RolesDescription { get; set; }
+    public required string Constraints { get; set; }
+    public required string HowToRespond { get; set; }
+    public bool IsActive { get; set; }
+    public string? BackgroundImageUrl { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public ICollection<CastingCallResponse> Responses { get; set; } = new List<CastingCallResponse>();
+}
+
+// Casting Call Response — witness presence logging
+public class CastingCallResponse
+{
+    public Guid Id { get; set; }
+    public Guid CastingCallId { get; set; }
+    public CastingCall? CastingCall { get; set; }
+    public required string Name { get; set; }
+    public required string Email { get; set; }
+    public required string RoleInterest { get; set; }
+    public string? Note { get; set; }
+    public DateTime RespondedAt { get; set; }
 }
 
 public class SplashPageDto
@@ -73,6 +106,40 @@ public class CreateBenefitRequest
     public required string Icon { get; set; }
     public required string Title { get; set; }
     public required string Description { get; set; }
+}
+
+// Casting Call DTOs
+public class CastingCallDto
+{
+    public Guid Id { get; set; }
+    public string ClientSlug { get; set; } = string.Empty;
+    public required string Title { get; set; }
+    public required string ProjectStatus { get; set; }
+    public required string ToneAndIntent { get; set; }
+    public required string RolesDescription { get; set; }
+    public required string Constraints { get; set; }
+    public required string HowToRespond { get; set; }
+    public bool IsActive { get; set; }
+    public string? BackgroundImageUrl { get; set; }
+}
+
+public class CreateCastingCallRequest
+{
+    public required string Title { get; set; }
+    public required string ProjectStatus { get; set; }
+    public required string ToneAndIntent { get; set; }
+    public required string RolesDescription { get; set; }
+    public required string Constraints { get; set; }
+    public required string HowToRespond { get; set; }
+    public string? BackgroundImageUrl { get; set; }
+}
+
+public class CastingCallResponseRequest
+{
+    public required string Name { get; set; }
+    public required string Email { get; set; }
+    public required string RoleInterest { get; set; }
+    public string? Note { get; set; }
 }
 
 // Membership Tiers

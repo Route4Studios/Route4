@@ -82,9 +82,10 @@ try
         var context = scope.ServiceProvider.GetRequiredService<Route4DbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         
-        // Create database if it doesn't exist
+        // Force recreate database to include new tables
+        context.Database.EnsureDeleted();
         context.Database.EnsureCreated();
-        logger.LogInformation("Database initialized successfully");
+        logger.LogInformation("Database recreated successfully with all tables");
     }
 }
 catch (Exception ex)

@@ -13,6 +13,8 @@ public class Route4DbContext : DbContext
     public DbSet<Client> Clients { get; set; }
     public DbSet<SplashPage> SplashPages { get; set; }
     public DbSet<Benefit> Benefits { get; set; }
+    public DbSet<CastingCall> CastingCalls { get; set; }
+    public DbSet<CastingCallResponse> CastingCallResponses { get; set; }
     public DbSet<MembershipTier> MembershipTiers { get; set; }
     public DbSet<TierFeature> TierFeatures { get; set; }
     public DbSet<StripeAccount> StripeAccounts { get; set; }
@@ -66,6 +68,37 @@ public class Route4DbContext : DbContext
             entity.HasOne(e => e.SplashPage)
                 .WithMany(s => s.Benefits)
                 .HasForeignKey(e => e.SplashPageId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CastingCall>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ProjectStatus).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.ToneAndIntent).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.RolesDescription).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.Constraints).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.HowToRespond).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.BackgroundImageUrl).HasMaxLength(500);
+            
+            entity.HasOne(e => e.Client)
+                .WithMany(c => c.CastingCalls)
+                .HasForeignKey(e => e.ClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CastingCallResponse>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.RoleInterest).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Note).HasMaxLength(500);
+            
+            entity.HasOne(e => e.CastingCall)
+                .WithMany(cc => cc.Responses)
+                .HasForeignKey(e => e.CastingCallId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -217,6 +250,24 @@ public class Route4DbContext : DbContext
                 Title = "Interactive Community",
                 Description = "Direct Q&A sessions with filmmakers and cast members",
                 DisplayOrder = 4
+            }
+        );
+
+        // Seed Casting Call (Signal I)
+        modelBuilder.Entity<CastingCall>().HasData(
+            new CastingCall
+            {
+                Id = Guid.Parse("77777777-7777-7777-7777-777777777777"),
+                ClientId = makingOfMaryId,
+                Title = "Signal I — Casting Call",
+                ProjectStatus = "Script complete. Pre-production underway.",
+                ToneAndIntent = "Episodic indie project. Restrained. Intentional. No context, only craft.",
+                RolesDescription = "Seeking actors and crew for participation in a process-first production. No outcomes revealed. No character arcs disclosed. Participation is presence, not performance.",
+                Constraints = "This is not a traditional audition. This is not a networking event. This is an invitation to witness and participate in world formation without exposition.",
+                HowToRespond = "Responses are accepted through private intake form below. Responses are reviewed deliberately. No social media engagement. No public discussion.",
+                IsActive = true,
+                BackgroundImageUrl = "assets/clients/making-of-mary/cover.jpg",
+                CreatedAt = DateTime.UtcNow
             }
         );
 
