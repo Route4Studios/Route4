@@ -44,6 +44,12 @@ public class Route4DbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Slug).IsRequired().HasMaxLength(100);
             entity.HasIndex(e => e.Slug).IsUnique();
+
+            // Theme customization columns
+            entity.Property(e => e.ThemePrimaryColor).HasMaxLength(20);
+            entity.Property(e => e.ThemeAccentColor).HasMaxLength(20);
+            entity.Property(e => e.ThemeFontFamily).HasMaxLength(100);
+            entity.Property(e => e.ThemeFontSize).HasMaxLength(20);
         });
 
         modelBuilder.Entity<SplashPage>(entity =>

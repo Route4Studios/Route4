@@ -183,6 +183,33 @@ public class CastingCallController : ControllerBase
             return BadRequest(new { Message = "Name, email, and role interest are required" });
         }
 
+        // Check if this email has already responded to this casting call
+        var existingResponse = await _context.CastingCallResponses
+            .Where(ccr => ccr.CastingCallId == castingCall.Id && ccr.Email.ToLower() == request.Email.Trim().ToLower())
+            .FirstOrDefaultAsync();
+
+        if (existingResponse != null)
+        {
+            // Update the existing record and bump the timestamp to reflect latest presence
+            existingResponse.Name = request.Name.Trim();
+            existingResponse.RoleInterest = request.RoleInterest.Trim();
+            existingResponse.Note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+            existingResponse.RespondedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Casting call response refreshed: Email={Email}, ClientSlug={ClientSlug}, ResponseId={ResponseId}",
+                request.Email.Trim(), clientSlug, existingResponse.Id);
+
+            return Ok(new {
+                Message = "Your presence has been refreshed",
+                ClientSlug = clientSlug,
+                ResponseId = existingResponse.Id,
+                Timestamp = existingResponse.RespondedAt
+            });
+        }
+
         // Create and save the response
         var response = new CastingCallResponse
         {
@@ -207,6 +234,43 @@ public class CastingCallController : ControllerBase
             ClientSlug = clientSlug,
             ResponseId = response.Id,
             Timestamp = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// Get all responses for the client's casting call (Admin only - will add auth later)
+    /// </summary>
+    [HttpGet("responses")]
+    public async Task<IActionResult> GetCastingCallResponses(string clientSlug)
+    {
+        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug && c.IsActive);
+        if (client == null)
+        {
+            return NotFound(new { Message = "Client not found" });
+        }
+
+        var castingCalls = await _context.CastingCalls
+            .Where(cc => cc.ClientId == client.Id)
+            .Include(cc => cc.Responses)
+            .ToListAsync();
+
+        var allResponses = castingCalls
+            .SelectMany(cc => cc.Responses.Select(r => new
+            {
+                r.Id,
+                r.RoleInterest,
+                r.RespondedAt,
+                CastingCallTitle = cc.Title,
+                CastingCallActive = cc.IsActive
+            }))
+            .OrderByDescending(r => r.RespondedAt)
+            .ToList();
+
+        return Ok(new
+        {
+            ClientSlug = clientSlug,
+            TotalResponses = allResponses.Count,
+            Responses = allResponses
         });
     }
 }

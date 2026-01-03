@@ -82,10 +82,13 @@ try
         var context = scope.ServiceProvider.GetRequiredService<Route4DbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
         
-        // Force recreate database to include new tables
-        context.Database.EnsureDeleted();
+        // Ensure database exists and create if needed (preserves existing data)
         context.Database.EnsureCreated();
-        logger.LogInformation("Database recreated successfully with all tables");
+
+        // Upgrade CastingCallResponses to use SQL Server temporal history for auditing refreshes
+        EnsureCastingCallResponsesTemporal(context, logger);
+
+        logger.LogInformation("Database initialized successfully");
     }
 }
 catch (Exception ex)
@@ -110,3 +113,41 @@ app.UseTenantResolution();
 app.MapControllers();
 
 app.Run();
+
+static void EnsureCastingCallResponsesTemporal(Route4DbContext context, ILogger logger)
+{
+    const string enableTemporalSql = @"
+IF OBJECT_ID('dbo.CastingCallResponses', 'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.CastingCallResponses', 'ValidFrom') IS NULL
+    BEGIN
+        ALTER TABLE dbo.CastingCallResponses
+        ADD 
+            ValidFrom datetime2(7) GENERATED ALWAYS AS ROW START HIDDEN NOT NULL DEFAULT SYSUTCDATETIME(),
+            ValidTo datetime2(7) GENERATED ALWAYS AS ROW END HIDDEN NOT NULL DEFAULT CONVERT(datetime2(7), '9999-12-31 23:59:59.9999999'),
+            PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo);
+
+        ALTER TABLE dbo.CastingCallResponses
+        SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.CastingCallResponsesHistory, DATA_CONSISTENCY_CHECK = ON));
+    END
+    ELSE
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'CastingCallResponses' AND temporal_type = 2)
+        BEGIN
+            ALTER TABLE dbo.CastingCallResponses
+            SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.CastingCallResponsesHistory, DATA_CONSISTENCY_CHECK = ON));
+        END
+    END
+END";
+
+    try
+    {
+        context.Database.ExecuteSqlRaw(enableTemporalSql);
+        logger.LogInformation("Temporal history ensured for CastingCallResponses");
+    }
+    catch (Exception temporalEx)
+    {
+        logger.LogError(temporalEx, "Failed to enable temporal history for CastingCallResponses");
+        throw;
+    }
+}

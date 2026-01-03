@@ -8,10 +8,16 @@ public class Client
     public string? Description { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool IsActive { get; set; }
-    
+
+    // Theme customization
+    public string? ThemePrimaryColor { get; set; }
+    public string? ThemeAccentColor { get; set; }
+    public string? ThemeFontFamily { get; set; }
+    public string? ThemeFontSize { get; set; }
+
     public ICollection<SplashPage> SplashPages { get; set; } = new List<SplashPage>();
     public ICollection<CastingCall> CastingCalls { get; set; } = new List<CastingCall>();
-    
+
     // Route4 Architecture Navigation
     public DiscordConfiguration? DiscordConfiguration { get; set; }
 }
