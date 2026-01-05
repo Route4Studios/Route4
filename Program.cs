@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 using Route4MoviePlug.Api.Data;
 using Route4MoviePlug.Api.Middleware;
 using Route4MoviePlug.Api.Services;
@@ -6,15 +7,40 @@ using Route4MoviePlug.Api.Services.Discord;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// --------------------
+// Services (REGISTER FIRST)
+// --------------------
+
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
 
-// Add DbContext with SQL Server
+// Swagger (Swashbuckle)
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Route4 API",
+        Version = "v1",
+        Description = "Internal API docs for Route4 (admin + orchestration)."
+    });
+    
+    // Optional: show XML comments (only if file exists)
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
+});
+
+// EF Core (you didn’t show DbContext registration earlier—ensure it exists)
 builder.Services.AddDbContext<Route4DbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    // TODO: set your provider here, example:
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+});
 
-// Add Stripe configuration
+// Stripe config
 var stripeSettings = new StripeSettings
 {
     SecretKey = builder.Configuration["Stripe:SecretKey"] ?? "sk_test_YOUR_TEST_SECRET_KEY",
@@ -23,11 +49,9 @@ var stripeSettings = new StripeSettings
     ClientId = builder.Configuration["Stripe:ClientId"] ?? "ca_YOUR_CLIENT_ID"
 };
 builder.Services.AddSingleton(stripeSettings);
-
-// Add Stripe payment service
 builder.Services.AddScoped<IStripePaymentService, StripePaymentService>();
 
-// Configure Discord settings
+// Discord settings
 var discordSettings = new DiscordSettings
 {
     BotToken = builder.Configuration["Discord:BotToken"] ?? "YOUR_BOT_TOKEN_HERE",
@@ -36,32 +60,27 @@ var discordSettings = new DiscordSettings
 builder.Configuration.GetSection("Discord").Bind(discordSettings);
 builder.Services.AddSingleton(discordSettings);
 
-// Add Route4 Release Management Service
 builder.Services.AddScoped<IReleaseManagementService, ReleaseManagementService>();
 
-// Add Route4 Discord service - conditional based on configuration
-builder.Services.AddSingleton<IDiscordBotService>(serviceProvider =>
+// Discord bot service (conditional)
+builder.Services.AddSingleton<IDiscordBotService>(sp =>
 {
-    var settings = serviceProvider.GetRequiredService<DiscordSettings>();
-    var logger = serviceProvider.GetRequiredService<ILogger<IDiscordBotService>>();
-    
-    // Use mock service when configured or when no bot token
+    var settings = sp.GetRequiredService<DiscordSettings>();
+    var logger = sp.GetRequiredService<ILogger<IDiscordBotService>>();
+
     if (settings.UseMockService || string.IsNullOrEmpty(settings.BotToken) || settings.BotToken == "YOUR_BOT_TOKEN_HERE")
     {
-        var mockLogger = serviceProvider.GetRequiredService<ILogger<MockDiscordBotService>>();
+        var mockLogger = sp.GetRequiredService<ILogger<MockDiscordBotService>>();
         logger.LogInformation("Using Mock Discord Service (UseMockService: {UseMock})", settings.UseMockService);
         return new MockDiscordBotService(mockLogger);
     }
-    else
-    {
-        var realLogger = serviceProvider.GetRequiredService<ILogger<RealDiscordBotService>>();
-        logger.LogInformation("Using Real Discord Service with token ending in ...{TokenSuffix}", 
-            settings.BotToken[^6..]);
-        return new RealDiscordBotService(settings, realLogger);
-    }
+
+    var realLogger = sp.GetRequiredService<ILogger<RealDiscordBotService>>();
+    logger.LogInformation("Using Real Discord Service with token ending in ...{TokenSuffix}", settings.BotToken[^6..]);
+    return new RealDiscordBotService(settings, realLogger);
 });
 
-// Add CORS for Angular app
+// CORS for Angular
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -72,48 +91,70 @@ builder.Services.AddCors(options =>
     });
 });
 
+// --------------------
+// Build (ONLY ONCE)
+// --------------------
 var app = builder.Build();
 
-// Initialize database
+// --------------------
+// Startup tasks (DB init, etc.) BEFORE Run
+// --------------------
 try
 {
-    using (var scope = app.Services.CreateScope())
-    {
-        var context = scope.ServiceProvider.GetRequiredService<Route4DbContext>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        
-        // Ensure database exists and create if needed (preserves existing data)
-        context.Database.EnsureCreated();
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<Route4DbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-        // Upgrade CastingCallResponses to use SQL Server temporal history for auditing refreshes
-        EnsureCastingCallResponsesTemporal(context, logger);
+    context.Database.EnsureCreated();
+    EnsureCastingCallResponsesTemporal(context, logger);
 
-        logger.LogInformation("Database initialized successfully");
-    }
+    logger.LogInformation("Database initialized successfully");
 }
 catch (Exception ex)
 {
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogError(ex, "Error seeding database");
+    logger.LogError(ex, "Error initializing database");
     throw;
 }
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// --------------------
+// Middleware / Pipeline (ONCE)
+// --------------------
+
+// Static files for Swagger UI
+app.UseStaticFiles();
+
+// Swagger endpoints
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Route4 API v1");
+        options.RoutePrefix = string.Empty; // Serve at root: /
+    });
 }
 
-app.UseHttpsRedirection();
+// Only redirect to HTTPS in production
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseCors();
 
-// Add custom middleware
+// Custom middleware for tenant resolution <slug> extraction
 app.UseTenantResolution();
+
+app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
 
+// --------------------
+// Helpers
+// --------------------
 static void EnsureCastingCallResponsesTemporal(Route4DbContext context, ILogger logger)
 {
     const string enableTemporalSql = @"
@@ -140,14 +181,6 @@ BEGIN
     END
 END";
 
-    try
-    {
-        context.Database.ExecuteSqlRaw(enableTemporalSql);
-        logger.LogInformation("Temporal history ensured for CastingCallResponses");
-    }
-    catch (Exception temporalEx)
-    {
-        logger.LogError(temporalEx, "Failed to enable temporal history for CastingCallResponses");
-        throw;
-    }
+    context.Database.ExecuteSqlRaw(enableTemporalSql);
+    logger.LogInformation("Temporal history ensured for CastingCallResponses");
 }

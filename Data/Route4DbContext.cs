@@ -18,7 +18,13 @@ public class Route4DbContext : DbContext
     public DbSet<MembershipTier> MembershipTiers { get; set; }
     public DbSet<TierFeature> TierFeatures { get; set; }
     public DbSet<StripeAccount> StripeAccounts { get; set; }
+
     public DbSet<Payment> Payments { get; set; }
+    public DbSet<ShortUrl> ShortUrls { get; set; }
+
+    // Missing DbSets restored
+    // Removed: public DbSet<CastingCallInvitation> CastingCallInvitations
+    public DbSet<DocumentDestructionMetadata> DocumentDestructionMetadata { get; set; }
 
     // Route4 Architecture Models
     public DbSet<ReleaseCycleTemplate> ReleaseCycleTemplates { get; set; }
@@ -87,6 +93,7 @@ public class Route4DbContext : DbContext
             entity.Property(e => e.Constraints).IsRequired().HasMaxLength(1000);
             entity.Property(e => e.HowToRespond).IsRequired().HasMaxLength(1000);
             entity.Property(e => e.BackgroundImageUrl).HasMaxLength(500);
+            entity.Property(e => e.ShortUrl).HasMaxLength(1000);
             
             entity.HasOne(e => e.Client)
                 .WithMany(c => c.CastingCalls)
@@ -120,7 +127,8 @@ public class Route4DbContext : DbContext
             entity.HasOne(e => e.Client)
                 .WithMany()
                 .HasForeignKey(e => e.ClientId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
+
         });
 
         modelBuilder.Entity<TierFeature>(entity =>
@@ -183,6 +191,8 @@ public class Route4DbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Removed: CastingCallInvitation entity configuration
+
         // Route4 Architecture Model Configurations
         ConfigureRoute4Models(modelBuilder);
 
@@ -194,6 +204,34 @@ public class Route4DbContext : DbContext
     {
         var makingOfMaryId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var splashPageId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var staticCreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var staticGuid1 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
+        var staticGuid2 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2");
+        var staticGuid3 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3");
+        var staticGuid4 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4");
+        var staticGuid5 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5");
+        var staticGuid6 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6");
+        var staticGuid7 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa7");
+        var staticGuid8 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa8");
+        var staticGuid9 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa9");
+        var staticGuid10 = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaab0");
+
+
+    // Add missing release cycle id for RitualMapping seed
+    var maryReleaseCycleId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+
+    // Ensure the referenced ReleaseCycleTemplate exists for RitualMappings
+    modelBuilder.Entity<ReleaseCycleTemplate>().HasData(
+        new ReleaseCycleTemplate
+        {
+            Id = maryReleaseCycleId,
+            ClientId = makingOfMaryId,
+            Name = "Mary Episode Release Cycle",
+            Description = "Full ritual sequence for Making of Mary episodes",
+            IsActive = true,
+            CreatedAt = staticCreatedAt
+        }
+    );
 
         modelBuilder.Entity<Client>().HasData(
             new Client
@@ -202,7 +240,7 @@ public class Route4DbContext : DbContext
                 Name = "Making of MARY",
                 Slug = "making-of-mary",
                 Description = "Exclusive behind-the-scenes documentary film project",
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = staticCreatedAt,
                 IsActive = true
             }
         );
@@ -216,14 +254,14 @@ public class Route4DbContext : DbContext
                 Subtitle = "Go Behind the Scenes",
                 Description = "Get unprecedented access to the entire film making process of MAKING OF MARY. Join our exclusive community and witness every step of the creative journey.",
                 IsPublished = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             }
         );
 
         modelBuilder.Entity<Benefit>().HasData(
             new Benefit
             {
-                Id = Guid.NewGuid(),
+                Id = staticGuid1,
                 SplashPageId = splashPageId,
                 Icon = "🎬",
                 Title = "Behind-the-Scenes Content",
@@ -232,7 +270,7 @@ public class Route4DbContext : DbContext
             },
             new Benefit
             {
-                Id = Guid.NewGuid(),
+                Id = staticGuid2,
                 SplashPageId = splashPageId,
                 Icon = "📝",
                 Title = "Script Development",
@@ -241,7 +279,7 @@ public class Route4DbContext : DbContext
             },
             new Benefit
             {
-                Id = Guid.NewGuid(),
+                Id = staticGuid3,
                 SplashPageId = splashPageId,
                 Icon = "🎥",
                 Title = "Production Diaries",
@@ -250,7 +288,7 @@ public class Route4DbContext : DbContext
             },
             new Benefit
             {
-                Id = Guid.NewGuid(),
+                Id = staticGuid4,
                 SplashPageId = splashPageId,
                 Icon = "💬",
                 Title = "Interactive Community",
@@ -273,7 +311,7 @@ public class Route4DbContext : DbContext
                 HowToRespond = "Responses are accepted through private intake form below. Responses are reviewed deliberately. No social media engagement. No public discussion.",
                 IsActive = true,
                 BackgroundImageUrl = "assets/clients/making-of-mary/cover.jpg",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             }
         );
 
@@ -326,87 +364,32 @@ public class Route4DbContext : DbContext
 
         modelBuilder.Entity<TierFeature>().HasData(
             // Signal Discovery Features (Threshold-based)
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Anonymous signal drops as they emerge", IsHighlighted = true, DisplayOrder = 1 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "BTS fragments without story context", IsHighlighted = false, DisplayOrder = 2 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Tools, hands, rooms — no explanations", IsHighlighted = false, DisplayOrder = 3 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "Pay only when you choose to witness", IsHighlighted = false, DisplayOrder = 4 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier1Id, Text = "No subscriptions, no ongoing fees", IsHighlighted = false, DisplayOrder = 5 },
-            
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-000000000001"), TierId = tier1Id, Text = "Anonymous signal drops as they emerge", IsHighlighted = true, DisplayOrder = 1 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-000000000002"), TierId = tier1Id, Text = "BTS fragments without story context", IsHighlighted = false, DisplayOrder = 2 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-000000000003"), TierId = tier1Id, Text = "Tools, hands, rooms — no explanations", IsHighlighted = false, DisplayOrder = 3 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-000000000004"), TierId = tier1Id, Text = "Pay only when you choose to witness", IsHighlighted = false, DisplayOrder = 4 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-000000000005"), TierId = tier1Id, Text = "No subscriptions, no ongoing fees", IsHighlighted = false, DisplayOrder = 5 },
+
             // Ritual Participation Features (Threshold-based)
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Writing table sessions (decisions, not outcomes)", IsHighlighted = true, DisplayOrder = 1 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Shot council participation (process preview)", IsHighlighted = true, DisplayOrder = 2 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Color/edit sessions without story reveals", IsHighlighted = false, DisplayOrder = 3 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Reflection channels after ritual participation", IsHighlighted = false, DisplayOrder = 4 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier2Id, Text = "Pay per session attended, not time-based", IsHighlighted = false, DisplayOrder = 5 },
-            
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-000000000006"), TierId = tier2Id, Text = "Writing table sessions (decisions, not outcomes)", IsHighlighted = true, DisplayOrder = 1 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-000000000007"), TierId = tier2Id, Text = "Shot council participation (process preview)", IsHighlighted = true, DisplayOrder = 2 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-000000000008"), TierId = tier2Id, Text = "Color/edit sessions without story reveals", IsHighlighted = false, DisplayOrder = 3 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-000000000009"), TierId = tier2Id, Text = "Reflection channels after ritual participation", IsHighlighted = false, DisplayOrder = 4 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-00000000000a"), TierId = tier2Id, Text = "Pay per session attended, not time-based", IsHighlighted = false, DisplayOrder = 5 },
+
             // Private Viewing Features (Threshold-based)
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Private location screenings (QR-based access)", IsHighlighted = true, DisplayOrder = 1 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Offline-safe viewing with verified witness status", IsHighlighted = false, DisplayOrder = 2 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "No recording, no sharing — sacred witness moments", IsHighlighted = false, DisplayOrder = 3 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Invitation-only events for proven participants", IsHighlighted = false, DisplayOrder = 4 },
-            new TierFeature { Id = Guid.NewGuid(), TierId = tier3Id, Text = "Pay only when invited and you choose to attend", IsHighlighted = false, DisplayOrder = 5 }
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-00000000000b"), TierId = tier3Id, Text = "Private location screenings (QR-based access)", IsHighlighted = true, DisplayOrder = 1 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-00000000000c"), TierId = tier3Id, Text = "Offline-safe viewing with verified witness status", IsHighlighted = false, DisplayOrder = 2 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-00000000000d"), TierId = tier3Id, Text = "No recording, no sharing — sacred witness moments", IsHighlighted = false, DisplayOrder = 3 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-00000000000e"), TierId = tier3Id, Text = "Invitation-only events for proven participants", IsHighlighted = false, DisplayOrder = 4 },
+            new TierFeature { Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-00000000000f"), TierId = tier3Id, Text = "Pay only when invited and you choose to attend", IsHighlighted = false, DisplayOrder = 5 }
         );
 
-        // Seed Stripe Account (for testing)
-        modelBuilder.Entity<StripeAccount>().HasData(
-            new StripeAccount
-            {
-                Id = Guid.NewGuid(),
-                ClientId = makingOfMaryId,
-                StripeAccountId = "acct_test_MakingOfMary", // Test account ID
-                IsActive = true,
-                ApplicationFeePercent = 10.00m, // Route4 takes 10%
-                ConnectedAt = DateTime.UtcNow
-            }
-        );
 
-        // Seed Mary's Release Cycle Template
-        var maryReleaseCycleId = Guid.NewGuid();
-        modelBuilder.Entity<ReleaseCycleTemplate>().HasData(
-            new ReleaseCycleTemplate
-            {
-                Id = maryReleaseCycleId,
-                ClientId = makingOfMaryId,
-                Name = "Mary Episode Release Cycle",
-                Description = "Full ritual sequence for Making of Mary episodes",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            }
-        );
-
-        // Seed Mary's Ritual Mappings - Phase 4 Implementation
         modelBuilder.Entity<RitualMapping>().HasData(
             new RitualMapping
             {
-                Id = Guid.NewGuid(),
-                ClientId = makingOfMaryId,
-                ReleaseCycleTemplateId = maryReleaseCycleId,
-                RitualName = "Signal",
-                StageType = "Signal",
-                Description = "Anonymous pre-artifact song drop",
-                ExecutionOrder = 1,
-                TargetChannelPurpose = "signal",
-                VisibilityLevel = "L2",
-                RequiredRoles = null,
-                IsReadOnly = true,
-                DefaultDurationHours = null,
-                OpenTrigger = "Manual",
-                CloseTrigger = "Manual",
-                AutomaticallyUnlockChannel = true,
-                AutomaticallyLockChannel = false,
-                SlowModeSeconds = null,
-                DisableFileUploads = false,
-                DisableExternalEmojis = false,
-                AnnouncementMessage = "🔊 **THE SIGNAL** — A new artifact has dropped. No context. No explanation. Just presence.",
-                ClosingMessage = null,
-                IsAnonymous = true,
-                CanBeSkipped = false,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            },
-            new RitualMapping
-            {
-                Id = Guid.NewGuid(),
+                Id = Guid.Parse("66666666-1111-1111-1111-111111111111"),
                 ClientId = makingOfMaryId,
                 ReleaseCycleTemplateId = maryReleaseCycleId,
                 RitualName = "Process",
@@ -430,11 +413,11 @@ public class Route4DbContext : DbContext
                 IsAnonymous = false,
                 CanBeSkipped = true,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             },
             new RitualMapping
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.Parse("66666666-2222-2222-2222-222222222222"),
                 ClientId = makingOfMaryId,
                 ReleaseCycleTemplateId = maryReleaseCycleId,
                 RitualName = "Hold",
@@ -458,11 +441,11 @@ public class Route4DbContext : DbContext
                 IsAnonymous = false,
                 CanBeSkipped = false,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             },
             new RitualMapping
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.Parse("66666666-3333-3333-3333-333333333333"),
                 ClientId = makingOfMaryId,
                 ReleaseCycleTemplateId = maryReleaseCycleId,
                 RitualName = "Drop",
@@ -486,11 +469,11 @@ public class Route4DbContext : DbContext
                 IsAnonymous = false,
                 CanBeSkipped = false,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             },
             new RitualMapping
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.Parse("66666666-4444-4444-4444-444444444444"),
                 ClientId = makingOfMaryId,
                 ReleaseCycleTemplateId = maryReleaseCycleId,
                 RitualName = "Echo",
@@ -514,11 +497,11 @@ public class Route4DbContext : DbContext
                 IsAnonymous = false,
                 CanBeSkipped = false,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             },
             new RitualMapping
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.Parse("66666666-5555-5555-5555-555555555555"),
                 ClientId = makingOfMaryId,
                 ReleaseCycleTemplateId = maryReleaseCycleId,
                 RitualName = "Fragments",
@@ -542,11 +525,11 @@ public class Route4DbContext : DbContext
                 IsAnonymous = false,
                 CanBeSkipped = true,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             },
             new RitualMapping
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.Parse("66666666-6666-6666-6666-666666666666"),
                 ClientId = makingOfMaryId,
                 ReleaseCycleTemplateId = maryReleaseCycleId,
                 RitualName = "Interval",
@@ -570,11 +553,11 @@ public class Route4DbContext : DbContext
                 IsAnonymous = false,
                 CanBeSkipped = true,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             },
             new RitualMapping
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.Parse("66666666-7777-7777-7777-777777777777"),
                 ClientId = makingOfMaryId,
                 ReleaseCycleTemplateId = maryReleaseCycleId,
                 RitualName = "PrivateViewing",
@@ -598,11 +581,11 @@ public class Route4DbContext : DbContext
                 IsAnonymous = false,
                 CanBeSkipped = true,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             },
             new RitualMapping
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.Parse("66666666-8888-8888-8888-888888888888"),
                 ClientId = makingOfMaryId,
                 ReleaseCycleTemplateId = maryReleaseCycleId,
                 RitualName = "Archive",
@@ -626,7 +609,7 @@ public class Route4DbContext : DbContext
                 IsAnonymous = false,
                 CanBeSkipped = false,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = staticCreatedAt
             }
         );
     }
@@ -826,6 +809,16 @@ public class Route4DbContext : DbContext
             
             entity.HasIndex(e => e.ReleaseInstanceId);
             entity.HasIndex(e => e.OccurredAt);
+        });
+
+        modelBuilder.Entity<ShortUrl>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ShortCode).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.TargetUrl).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.ExpiresAt);
+            entity.HasIndex(e => e.ShortCode).IsUnique();
         });
     }
 

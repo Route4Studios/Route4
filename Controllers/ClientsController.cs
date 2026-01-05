@@ -8,6 +8,7 @@ namespace Route4MoviePlug.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+
 public class ClientsController : ControllerBase
 {
     private readonly Route4DbContext _context;
@@ -25,6 +26,45 @@ public class ClientsController : ControllerBase
         _logger = logger;
         _discordBot = discordBot;
         _configuration = configuration;
+    }
+
+    // --- Casting Call Endpoints ---
+
+    /// <summary>
+    /// Create a new casting call for a client by slug
+    /// </summary>
+    [HttpPost("{clientSlug}/castingcall")]
+    public async Task<IActionResult> CreateCastingCall(string clientSlug, [FromBody] CreateCastingCallRequest request)
+    {
+        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug && c.IsActive);
+        if (client == null)
+            return NotFound(new { Message = "Client not found" });
+
+        // Deactivate any existing active casting calls for this client
+        var activeCalls = await _context.CastingCalls.Where(cc => cc.ClientId == client.Id && cc.IsActive).ToListAsync();
+        foreach (var cc in activeCalls)
+        {
+            cc.IsActive = false;
+        }
+
+        var castingCall = new CastingCall
+        {
+            Id = Guid.NewGuid(),
+            ClientId = client.Id,
+            Title = request.Title,
+            ProjectStatus = request.ProjectStatus,
+            ToneAndIntent = request.ToneAndIntent,
+            RolesDescription = request.RolesDescription,
+            Constraints = request.Constraints,
+            HowToRespond = request.HowToRespond,
+            IsActive = true,
+            BackgroundImageUrl = request.BackgroundImageUrl,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.CastingCalls.Add(castingCall);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Id = castingCall.Id });
     }
 
     /// <summary>

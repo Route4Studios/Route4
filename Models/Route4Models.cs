@@ -56,13 +56,16 @@ public class ReleaseInstance
     public required string Title { get; set; }
     public string? Description { get; set; }
     public required string CurrentStage { get; set; } // Current stage name
-    public string Status { get; set; } = "Draft"; // Draft, Scheduled, Active, Completed, Archived
+    public string Status { get; set; } = "Draft"; // Draft, Scheduled, Active, Completed, Archived, ArchiveDistributed
     
     public DateTime? ScheduledStartAt { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    
+    // Distribution metadata (populated when ARCHIVE → ARCHIVE_DISTRIBUTED)
+    public string? DistributionMetadata { get; set; } // JSON serialized DistributionMetadataObject
     
     public ICollection<ReleaseStageExecution> StageExecutions { get; set; } = new List<ReleaseStageExecution>();
     public ICollection<ReleaseArtifact> Artifacts { get; set; } = new List<ReleaseArtifact>();
@@ -311,4 +314,14 @@ public static class ReleaseStateMachine
         "PrivateViewing", // Witness-only
         "Archive"       // Permanent record
     };
+}
+
+/// <summary>
+/// Distribution Metadata Object - Serialized when release moves to ARCHIVE_DISTRIBUTED state
+/// </summary>
+public class DistributionMetadataObject
+{
+    public string[] Platforms { get; set; } = Array.Empty<string>();
+    public DateTime? SubmittedAt { get; set; }
+    public string? SubmissionStatus { get; set; } // Pending, Accepted, Rejected
 }

@@ -63,6 +63,7 @@ public class CastingCall
     public required string HowToRespond { get; set; }
     public bool IsActive { get; set; }
     public string? BackgroundImageUrl { get; set; }
+    public string? ShortUrl { get; set; } // Added for direct short URL storage
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public ICollection<CastingCallResponse> Responses { get; set; } = new List<CastingCallResponse>();

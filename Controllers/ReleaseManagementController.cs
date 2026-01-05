@@ -7,8 +7,8 @@ using Route4MoviePlug.Api.Services;
 namespace Route4MoviePlug.Api.Controllers;
 
 /// <summary>
-/// Release Management Controller - Phase 3 & 4 Implementation
-/// Manages release instances, state transitions, and ritual mapping
+/// Release Management Controller - Phase 3 &amp; 4 Implementation.
+/// Manages release instances, state transitions, and ritual mapping.
 /// </summary>
 [ApiController]
 [Route("api/admin/clients/{clientSlug}/releases")]
