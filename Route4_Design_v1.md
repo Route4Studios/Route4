@@ -1,10 +1,11 @@
+
 # Route4 Non-Dependent Release Engine
 ## Design Document - v1
 --
 
 ## 1. Executive Summary
 
-**Route4** is a multi-tenant RdaS platform that enables creators to release work with restraint, ritual, and trust. It builds audience through documented care, protects authorship, and treats capital as an outcome rather than a driver.
+**Route4** is a multi-tenant, RdaS, Ritual discipline as service, software that enables creators to release work with restraint, ritual, and trust. It builds audience through documented care, protects authorship, and treats capital as an outcome rather than a driver.
 
 ### 1.1 Core Principles
 - **Expose decisions, not outcomes**
@@ -69,8 +70,6 @@ Route4 has minimal direct competitors because its "ritual discipline + story pro
 
 #### 1.4.4 Route4's Competitive Advantage
 
-**Ritual discipline as service.**
-
 Route4 provides:
 - Enforced release cycle (no creator can skip ritual stages)
 - Story protection via visibility levels (L0–L3 automatically enforced)
@@ -114,6 +113,7 @@ Secondary Navy:  #16213e  (elevated surfaces, cards)
 Accent Red:      #e94560  (ritual state transitions only)
 Gray Neutral:    #6b7280  (secondary text, disabled states)
 White:           #ffffff  (primary text on dark backgrounds)
+Accent Gold:     #ffd700 (secondary text on dark backgrounds)
 ```
 
 ### Visual Principles
@@ -164,6 +164,41 @@ White:           #ffffff  (primary text on dark backgrounds)
 
 This aesthetic ensures Route4 feels like a tool for creators, not a platform optimizing for attention.
 
+### 2.1.c Route4 Studios Branding
+
+**Logo & Visual Identity:**
+
+Route4 Studios represents the platform's geographic origin (Ohio) and its role as a curation layer for distributed creator communities.
+
+![Route4 Studios Logo](https://github.com/route4studios/route4-movieplug/raw/main/branding/route4_studios_logo.png)
+
+**Logo Specifications:**
+- Shape: Ohio state outline with silver chrome border
+- Primary Text: "ROUTE 4" (bold, industrial sans-serif)
+- Secondary Text: "STUDIOS" (bold, matching ROUTE 4)
+- Accent Color: Red (#e94560) for the numeral "4"
+- Background: Dark navy (#1a1a2e)
+- File Format: PNG (transparent background, 512x512px minimum)
+- File Location: `ClientApp/public/assets/route4_logo.jpeg`
+
+**Usage Guidelines:**
+- Minimum size: 48px (header placement, as implemented on homepage)
+- Padding: 16px minimum clearspace on all sides
+- Opacity: 0.9 (subtle, not aggressive)
+- Never scale below 48px (legibility loss)
+- Use on dark backgrounds only (navy, dark gray, black)
+- No color inversion or manipulation (logo is locked to silver + red)
+
+**Placement:**
+- Homepage header (left side, 48px height)
+- Email footers (24px height, light background acceptable with opacity adjustment)
+- Documentation headers (32px height)
+- Never use as site favicon (too detailed, use simplified icon instead)
+
+**Philosophy:**
+The Route4 Studios logo reinforces the platform's identity as a curation layer rooted in specific geography (Ohio), not a nebulous "platform" optimizing for global scale. The chrome border conveys craft and precision; the red numeral "4" is the only vibrant element, maintaining restraint while preventing invisibility.
+
+---
 
 ### 2.2 Core Components
 
@@ -503,27 +538,249 @@ Profile    → Witness status & invitations
 
 ## 9. Media Pipeline & Asset Management
 
-### 9.1 Route4-FFmpeg API
-Auto-generates ritual-required artifacts:
+### 9.1 Route4.FFmpeg — Separate Service for Media Processing
 
-#### 9.1.1 Primary Jobs
-1. **CreateFragmentProxy (L2)**
-  - Auto-trim 15-90 seconds
-  - Optional mute/room-tone
-  - Safe crop/blur/mask
-  - Multi-aspect outputs
+#### 9.1.1 Architectural Rationale: Why Separate Project?
 
-2. **CreateProcessPreview (L1)**
-  - Muted previews for craft sessions
-  - Low-res proxies
-  - Burn-in watermarks
-  - Still extraction
+**Problem:** Multiple tenants (clients) can trigger FFmpeg format conversion simultaneously. CPU-intensive media processing cannot block the main API request cycle. Route4.Api must remain responsive while format jobs queue and process asynchronously.
 
-3. **CreateReleaseRenditions (L3)**
-  - Public release encodes
-  - Private master/archive
-  - Thumbnail sets
-  - Credits roll variants
+**Solution:** Route4.FFmpeg is a **standalone Worker Service** (separate .NET project) that:
+- Monitors a shared job queue (Redis or SQL Server)
+- Processes format conversion requests independently
+- Logs completion status + processing time for billing/audit
+- Scales horizontally (multiple FFmpeg workers can run in parallel)
+- Isolates CPU load from main API tier
+
+**Architecture Diagram:**
+```
+Route4.Api                          Route4.FFmpeg (Worker Service)
+├── Receives ritual trigger         ├── Polls job queue
+├── Creates FFmpeg job record       ├── Dequeues format requests
+├── Enqueues to Redis/MSSQL         ├── Runs ffmpeg CLI commands
+└── Returns 202 (Accepted)          ├── Logs processing metrics
+                                    ├── Updates job status
+                                    └── Stores output files to Frame.io
+```
+
+**Multi-Tenant Isolation:**
+```
+Tenant A: Signal → Enqueue Fragment Proxy Job (15 min duration)
+Tenant B: Process → Enqueue Process Preview Job (concurrently)
+Tenant C: Drop → Enqueue Release Renditions Job (concurrently)
+↓
+Redis Queue: [Job_A, Job_B, Job_C, ...]
+↓
+Worker 1: Processing Job_A
+Worker 2: Processing Job_B
+Worker 3: Processing Job_C
+```
+
+#### 9.1.2 Implementation Architecture
+
+**Project Structure:**
+```
+Route4.FFmpeg/
+├── Route4.FFmpeg.Worker/          (Console app, hosted service)
+├── Route4.FFmpeg.Models/          (Job models, shared with API)
+├── Route4.FFmpeg.Services/
+│   ├── IJobQueueService.cs       (Redis/MSSQL abstraction)
+│   ├── IFFmpegService.cs         (FFmpeg CLI wrapper)
+│   ├── IFrameioUploadService.cs  (Asset storage)
+│   └── JobProcessingService.cs   (Main worker logic)
+└── appsettings.json              (FFmpeg bin path, queue config)
+```
+
+**Shared Models (Route4.FFmpeg.Models):**
+```csharp
+public class FFmpegJob
+{
+    public Guid Id { get; set; }
+    public Guid ClientId { get; set; }
+    public required string ReleaseKey { get; set; }
+    public required string JobType { get; set; } // CreateFragmentProxy, CreateProcessPreview, CreateReleaseRenditions
+    public required string InputAssetPath { get; set; } // S3/Frame.io URL
+    public string Status { get; set; } = "Queued"; // Queued, Processing, Completed, Failed
+    
+    // Job metadata
+    public Dictionary<string, string>? Parameters { get; set; } // duration, aspect-ratio, etc.
+    public string? OutputPath { get; set; } // Where output was stored
+    
+    // Timing & audit
+    public DateTime CreatedAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public long? ProcessingDurationMs { get; set; } // For billing/logging
+    public string? ErrorMessage { get; set; }
+}
+```
+
+#### 9.1.3 Primary Job Types
+
+**1. CreateFragmentProxy (L2 — Public Residue)**
+```
+Input:  Raw ritual asset (ceremony recording, 60 min)
+Process:
+  - Auto-trim to 15-90 seconds (detect silence, extract key moment)
+  - Optional mute/room-tone audio replacement
+  - Safe crop/blur/mask (remove identifiable backgrounds)
+  - Multi-aspect outputs (16:9, 9:16, 1:1 for platform distribution)
+Output: S1E1__fragment__public__v1.mp4 (various aspects)
+Time:   ~3-5 min per job (depending on input duration)
+```
+
+**2. CreateProcessPreview (L1 — Witnessed Craft)**
+```
+Input:  Process ritual recording (writing session, 45 min)
+Process:
+  - Mute audio (privacy)
+  - Low-res encode (480p, 2 Mbps)
+  - Burn-in watermark ("PROCESS WITNESS ONLY")
+  - Extract stills every 30 seconds
+Output: S1E1__process-writing__process_preview__v1.mp4 + stills
+Time:   ~2-3 min per job
+```
+
+**3. CreateReleaseRenditions (L3 — Public Release)**
+```
+Input:  Master release file (2160p, ProRes, 10 GB)
+Process:
+  - Public release encode (1080p, H.264, 8 Mbps)
+  - Private master archive (lossless, original quality)
+  - Thumbnail sets (poster, hero, grid)
+  - Credits roll variants (different languages/aspect ratios)
+Output:
+  - S1E1__drop__release_public__v1.mp4 (main)
+  - S1E1__archive__master__v1.mp4 (private)
+  - S1E1__drop__thumbnail__v1.jpg (poster)
+Time:   ~15-45 min per job (Master file can be very large)
+```
+
+#### 9.1.4 Queue Implementation (Redis or MSSQL)
+
+**Option A: Redis (Recommended for throughput)**
+```csharp
+// Route4.Api: Enqueue job
+IJobQueueService queue = new RedisJobQueueService(connectionString);
+var job = new FFmpegJob {
+    Id = Guid.NewGuid(),
+    ClientId = client.Id,
+    ReleaseKey = "S1E1",
+    JobType = "CreateFragmentProxy",
+    InputAssetPath = "s3://bucket/route4-makingofmary/S1E1_raw.mp4",
+    Parameters = new() { { "duration", "30" }, { "aspect-ratio", "16:9" } },
+    CreatedAt = DateTime.UtcNow,
+};
+await queue.EnqueueAsync(job);
+// Returns immediately to user (202 Accepted)
+
+// Route4.FFmpeg Worker: Dequeue and process
+while (true)
+{
+    var job = await queue.DequeueAsync(timeoutMs: 5000);
+    if (job == null) continue;
+    
+    job.Status = "Processing";
+    job.StartedAt = DateTime.UtcNow;
+    await queue.UpdateAsync(job);
+    
+    try
+    {
+        var output = await ffmpegService.ProcessAsync(job);
+        await frameioUploadService.UploadAsync(output);
+        
+        job.Status = "Completed";
+        job.OutputPath = output.S3Path;
+        job.ProcessingDurationMs = (long)(DateTime.UtcNow - job.StartedAt).TotalMilliseconds;
+    }
+    catch (Exception ex)
+    {
+        job.Status = "Failed";
+        job.ErrorMessage = ex.Message;
+    }
+    finally
+    {
+        job.CompletedAt = DateTime.UtcNow;
+        await queue.UpdateAsync(job);
+    }
+}
+```
+
+**Option B: MSSQL (If Redis unavailable)**
+- Use Service Bus or simple polling with `WHERE Status = 'Queued'` LIMIT 1
+- Slower throughput but no external dependency
+
+#### 9.1.5 Status Tracking & Logging
+
+**API Endpoint for Job Status:**
+```
+GET /api/clients/{clientSlug}/releases/{releaseKey}/ffmpeg-jobs
+Response: List<FFmpegJob> with Status + ProcessingDurationMs
+
+GET /api/clients/{clientSlug}/releases/{releaseKey}/ffmpeg-jobs/{jobId}
+Response: Single job with detailed metrics
+```
+
+**Logging For Billing & Audit:**
+```
+[2026-01-05 14:32:15.123] FFmpegJob: CREATE_FRAGMENT_PROXY
+  ClientId: {making-of-mary}
+  ReleaseKey: S1E1
+  InputSize: 2.4 GB
+  Status: Queued → Processing (14:32:20) → Completed (14:35:45)
+  ProcessingDurationMs: 205000 (3 min 25 sec)
+  OutputSize: 45 MB (16:9) + 52 MB (9:16) + 38 MB (1:1)
+  Cost Impact: Allocated to Gate 2 ($10–$50 range)
+```
+
+**Metrics to Track:**
+- Time from enqueue → dequeue (queue wait time)
+- Processing duration (actual FFmpeg execution)
+- Input size vs output size (compression efficiency)
+- Success/failure rate per job type
+- Resource utilization (CPU, disk I/O)
+
+#### 9.1.6 Scaling & Reliability
+
+**Horizontal Scaling:**
+```
+Production Setup:
+├── Route4.Api (Main tier)
+│   └── 3 instances (web farm)
+├── Route4.FFmpeg.Worker (Processing tier)
+│   └── 2-5 instances (auto-scale based on queue depth)
+└── Shared Infrastructure
+    ├── Redis (job queue)
+    ├── Frame.io (asset storage)
+    └── MSSQL (job history + metrics)
+```
+
+**Resilience Patterns:**
+- Idempotent job IDs (can retry same job safely)
+- Dead-letter queue (jobs failing 3x moved to manual review)
+- Heartbeat monitoring (workers send "alive" signal every 30 sec)
+- Job timeout (if processing > 1 hour, kill and retry)
+
+#### 9.1.7 FFmpeg Configuration (appsettings.json)
+
+```json
+{
+  "FFmpeg": {
+    "BinaryPath": "C:\\ffmpeg\\bin\\ffmpeg.exe",
+    "TimeoutSeconds": 3600,
+    "TempWorkingDirectory": "C:\\route4-ffmpeg-temp"
+  },
+  "JobQueue": {
+    "Provider": "Redis",
+    "ConnectionString": "localhost:6379"
+  },
+  "Frameio": {
+    "ApiKey": "{{ secrets }}",
+    "ProjectId": "route4-releases"
+  }
+}
+```
+
+---
 
 ### 9.2 Media Provider Integration (Frame.io)
 
@@ -900,6 +1157,191 @@ Route4 automatically escalates creators to wider audiences when they've proven s
 
 ---
 
+#### 10.6.3b Revenue Example: Tier B (Making of MARY - Episode 1)
+
+**Context:** Mary's production team chose **Tier B (Managed Partnership)** during onboarding. Route4's AI Business Manager handles all witness recruitment, outreach, and platform management. Episode 1 reaches completion and generates the following revenue.
+
+**Financial Timeline:**
+
+| Gate/Phase | Ritual/Event | Creator Charge | Timing | Notes |
+|-----------|--------------|----------------|--------|-------|
+| Gate 0 | AI Business Manager Activation | $0 (Tier B included) | Day 1 | No charge; outreach included in partnership |
+| Gate 1 | First 50 witness participations | $0 (under threshold) | Day 15 | Witness recruitment begins; no charge yet |
+| Gate 1 | Threshold crossed (50+ witnesses) | **$50** | Day 18 | Creator pays once threshold met |
+| Gate 2 | Process previews + fragments created | **$25** | Day 45 | FFmpeg jobs: low-res proxies + BTS clips |
+| Gate 3 | Witness expansion (100+ witnesses) | **$100** | Day 60 | Creator community validates production value |
+| Gate 4 | Premium witness (top 10 contributors) | **$75** | Day 80 | Elevated access for key participants |
+| Gate 5 | Filmhub Distribution (Tier B revenue share) | **See below** | Day 100 | Automatic submission; triggers revenue split |
+
+**Gates 1-4 Subtotal (Creator Charges):** $250
+
+**Year 1 Distribution Revenue (Tier B Split):**
+
+```
+Platform Performance:
+├── Tubi:          18K views  → $2,700 revenue
+├── Pluto TV:      15K views  → $2,250 revenue
+├── Roku:          12K views  → $1,800 revenue
+└── Amazon Freevee: 5K views  → $1,250 revenue
+   ════════════════════════════════════════════
+   Total Platforms: 50K views → $8,000 gross revenue
+```
+
+**Revenue Split (Tier B: 85% Creator / 15% Route4):**
+
+| Entity | Revenue Share | Amount | Formula |
+|--------|---------------|--------|---------|
+| **Creator (Mary's Production)** | 85% | **$6,800** | $8,000 × 0.85 |
+| **Route4 Studios** | 15% | **$1,200** | $8,000 × 0.15 |
+
+**Creator's Total Year 1 Earnings:**
+
+```
+Gate Charges Paid Out:        -$250
+Filmmaker Earnings (Gate 1-4): -$250 (already paid)
+Distribution Revenue (Tier B):  +$6,800
+═════════════════════════════════════
+Net Creator Income (Year 1):    $6,550
+```
+
+**Route4's Year 1 Revenue (Tier B):**
+
+```
+AI Business Manager Service:  $0 (included in revenue share model)
+Filmhub Distribution Fee:      $0 (revenue share instead of flat fee)
+Platform Relationship Mgmt:    $0 (included)
+Distribution Revenue Share:    +$1,200 (15% of gross)
+═════════════════════════════════════
+Net Route4 Income (Year 1):    $1,200
+```
+
+**Projected Year 2 (If $10K Revenue Threshold Met):**
+
+Assuming continued platform performance + Year 2 momentum:
+- Projected views: 75K–100K (20-30% growth year-over-year typical for streaming)
+- Projected revenue: $12,000–$15,000
+- Creator share: $10,200–$12,750 (85%)
+- Route4 share: $1,800–$2,250 (15%)
+
+**Why Tier B Works for Mary:**
+
+1. **No Upfront Capital:** Mary pays only $250 in Gate charges (Gates 1-4). Distribution happens at cost.
+2. **Hands-Off Distribution:** Route4's AI Business Manager handles all outreach, community building, platform management. Mary focuses on next episode.
+3. **Ongoing Revenue:** Instead of one-time $250 payment (Tier A), Mary gets 85% of platform earnings indefinitely.
+4. **Platform Relationships:** Route4 maintains ongoing relationships with Tubi, Pluto, Roku, Amazon Freevee. Negotiates better placement, featured slots, seasonal bundles.
+5. **Quarterly Reports:** Route4 provides detailed breakdown: views/platform, revenue/platform, trending data.
+
+**Route4's Revenue Model (Tier B):**
+
+- Low upfront cost ($0 out-of-pocket for distribution)
+- Sustainable 15% revenue share (aligns incentives: Route4 profits when creator succeeds)
+- Scales to 100+ creators (each 15% adds up; $1,200/creator × 50 creators = $60K ARR)
+- Defensible moat: platform relationships + audience data
+
+**Comparison: Tier A vs Tier B for Mary's Episode 1**
+
+| Aspect | Tier A | Tier B |
+|--------|--------|--------|
+| **Gate Charges (1-4)** | $250 | $250 |
+| **Distribution Fee** | $250 (Filmhub submit) | $0 (included) |
+| **Outreach/Marketing** | Mary's responsibility | Route4 AI Business Manager |
+| **Platform Relationships** | Mary handles | Route4 manages |
+| **Year 1 Distribution Revenue** | $8,000 (100% to Mary) | $6,800 (85% to Mary) |
+| **Route4 Revenue** | $250 (one-time) | $1,200 (Year 1) |
+| **Best For** | Established creators with audience | Growing creators needing distribution support |
+
+**Decision:** Mary chose Tier B because she wanted Route4 to handle the messy part (platform outreach) while she focused on Season 1 Episode 2. The $1,200 revenue loss Year 1 (vs Tier A) is offset by Route4's marketing support driving an estimated 20% higher platform adoption.
+
+---
+
+#### 10.6.3c Route4's Revenue Strategy: Why Sacrifice Threshold Fees for Tier B?
+
+**The Tier B Trade-Off:**
+
+Route4 makes a strategic bet with Tier B creators: **Forgo upfront threshold fees to capture long-term revenue share.**
+
+```
+Tier A Scenario (Mary chooses "Submission Only"):
+├── Gates 1-4: $250 (threshold fees, paid by creator)
+├── Gate 5: $250 (Filmhub submission)
+└── Total Route4 Revenue (Tier A): $500 (one-time, then done)
+
+Tier B Scenario (Mary chooses "Managed Partnership"):
+├── Gates 1-4: $0 (included in partnership model)
+├── Gate 5: $0 (included in partnership model)
+├── Year 1 Revenue Share: $1,200 (15% of $8K platform revenue)
+├── Year 2 Revenue Share: $1,800–$2,250 (15% of $12K–$15K)
+├── Year 3 Revenue Share: $2,250–$3,750 (15% of $15K–$25K, assuming 2+ episodes)
+└── Total Route4 Revenue (Tier B, 3 years): $5,250–$7,200
+```
+
+**Break-Even Analysis:**
+
+| Timeline | Cumulative Revenue (Tier A) | Cumulative Revenue (Tier B) | Difference |
+|----------|---------------------------|---------------------------|-----------|
+| Year 1 | $500 | $1,200 | +$700 (Tier B ahead) |
+| Year 2 | $500 | $3,000–$3,450 | +$2,500–$2,950 (Tier B ahead) |
+| Year 3 | $500 | $5,250–$7,200 | +$4,750–$6,700 (Tier B ahead) |
+
+**Route4 breaks even on the Tier B sacrifice by month 8–10 of Year 1.**
+
+**Why This Works:**
+
+1. **Alignment of Incentives:** Route4 only profits when creators succeed. If Mary's film generates $0 views, Route4 gets $0. This creates shared risk.
+
+2. **AI Business Manager Pays For Itself:** The $0 upfront cost for Gates 1-4 is offset by aggressive AI Business Manager recruitment driving 20%+ higher platform adoption. That 20% = $1,600 additional Year 1 revenue → $240 for Route4.
+
+3. **Compounding Effect:** Mary releases Episode 2, 3, 4... Each episode's revenue share stacks on previous episodes. By Year 2, Mary is generating 2–3 concurrent revenue streams.
+
+4. **Customer Loyalty:** Tier B creators stay with Route4 because they're making real money ($6,800+ Year 1). They don't shop around for competing platforms.
+
+5. **Network Effects:** As Route4 accumulates Tier B creators (10, 20, 50), the platform relationship data becomes valuable. Route4 knows which creators drive engagement on Tubi vs Pluto vs Roku. This becomes competitive moat—Route4 can negotiate better deals with platforms.
+
+**Scaling Math (Route4's Portfolio):**
+
+```
+Scenario: Route4 onboards 50 creators in Year 1, 30 choose Tier B
+
+Year 1 Revenue:
+├── Tier A creators (20): 20 × $500 = $10,000
+├── Tier B creators (30): 30 × $1,200 = $36,000
+└── Total: $46,000
+
+Year 2 Revenue (assuming Year 1 Tier B creators continue + 20 new Tier B):
+├── Tier A creators (additional): 20 × $500 = $10,000
+├── Tier B (Year 1 cohort, avg growth to $1,800): 30 × $1,800 = $54,000
+├── Tier B (Year 2 new cohort): 20 × $1,200 = $24,000
+└── Total: $88,000
+
+Year 3 Revenue (cumulative cohorts):
+├── Year 1 Tier B cohort (avg $2,500): 30 × $2,500 = $75,000
+├── Year 2 Tier B cohort (avg $1,800): 20 × $1,800 = $36,000
+├── Year 3 Tier B cohort (new): 20 × $1,200 = $24,000
+└── Total: $135,000
+```
+
+**The Strategic Insight:**
+
+Tier B is Route4's **long-term revenue engine**. Tier A is a one-time transaction. By Year 3, if Route4 accumulates 70 Tier B creators, the platform generates $135K annually from revenue share alone—far exceeding the $500-per-creator flat fees from Tier A.
+
+**Risk Mitigation:**
+
+If a Tier B creator's film underperforms (generates $0 views), Route4 still invested AI Business Manager resources upfront. To prevent this:
+- AI Business Manager applies strict targeting criteria (only recruit witnesses with high intent)
+- Route4 monitors engagement metrics; pivot strategy if views stagnate after 30 days
+- Dead-letter creators: If Year 2 projects < $1K revenue, Route4 may deprioritize (focus AI resources on high-growth creators)
+
+**Conclusion:**
+
+Tier B's revenue model is **deliberately patient capital.** Route4 sacrifices $250–$500 upfront per creator to earn $1,200–$3,000+ over 2–3 years. This works only if:
+1. Route4's AI Business Manager actually drives 20% higher platform adoption (proven through analytics)
+2. Platform partnerships + audience data become defensible moat (competitors can't replicate)
+3. Creator churn stays < 20% (creators keep releasing, Route4 keeps earning)
+
+If all three hold, Tier B becomes Route4's path to sustainable, creator-aligned revenue.
+
+---
+
 #### 10.6.4 Distribution Communication Strategy: Transparent Log (Option A)
 
 **Decision:** Route4 communicates distribution submission to creators through a transparent state transition, not through celebration language or platform hype.
@@ -1143,6 +1585,1014 @@ When automatic distribution triggers (ARCHIVE + thresholds met), Route4 executes
 
 **5-Year Projection (with Tier B Outreach):**
 - Year 1 witnesses: 150+ (driven by AI outreach management)
+- Year 2 witnesses: 200–250 (improved targeting from Year 1 data)
+- Year 3 revenue share: $2,250–$3,750 (multiple releases compounding)
+- Year 5 total creator earnings: $15,000–$25,000 (sustained platform growth)
+
+---
+
+## 11. Outreach AI — Casting Call Distribution Engine
+
+### 11.1 Overview & Philosophy
+
+**Problem Statement:**
+Creators have casting calls ready and trackable short URLs generated, but lack expertise in community targeting, timing, and continuous witness recruitment. Manual outreach is time-intensive, error-prone, and difficult to track.
+
+**Route4's Solution:**
+An AI-assisted outreach engine that curates film communities, generates compliant messaging, tracks all interactions, and provides creators with a "just do it" blueprint—either fully automated (where ToS-safe) or human-assisted with pre-filled payloads.
+
+**Core Design Principles:**
+- **Human-in-front for compliance:** No ToS violations; humans execute where APIs unavailable
+- **Maximum trackability:** Every action logged with UTM'd short URLs for attribution
+- **Minimal creator friction:** "Auto" channels run autonomously; "Script" channels deliver copy-paste payloads
+- **Progressive disclosure:** Phase I builds directory; Phase II adds targeting; Phase III automates posting
+
+---
+
+### 11.2 System Architecture
+
+#### 11.2.1 Three-Tier Architecture
+
+```
+Route4.Outreach.Directory (Phase I)
+├── Community profiles (film commissions, forums, groups)
+├── Contact tracking (who was reached, when, via what channel)
+└── UTM short URL generation (per-channel attribution)
+
+Route4.Outreach.Targeting (Phase II)
+├── AI-curated community matching (genre, tone, location fit)
+├── Script generation (tone-matched to community culture)
+└── Posting schedule optimization (best times per platform)
+
+Route4.Outreach.Execution (Phase III)
+├── Auto: API-based posting (Discord, email, SMS, Reddit if allowed)
+├── Script: Form-filler payloads (Backstage, film commissions, Facebook)
+└── Feedback loop (clicks → conversions → witness participation)
+```
+
+#### 11.2.2 Channel Classification Matrix
+
+| Channel | Type | ToS-Safe? | Route4 Capability | Human Requirement |
+|---------|------|-----------|-------------------|-------------------|
+| **Discord (Route4 servers)** | Auto | ✅ Yes | Bot posts via Discord.NET API | None (fully automated) |
+| **Email (opt-in lists)** | Auto | ✅ Yes | Transactional email API (SendGrid/Mailgun) | None (fully automated) |
+| **SMS (opt-in talent)** | Auto | ✅ Yes | Twilio API with compliance | None (fully automated) |
+| **Reddit (approved subs)** | Auto | ⚠️ Conditional | Reddit API if moderator approval obtained | Initial mod contact required |
+| **Meetup/Eventbrite** | Auto | ✅ Yes | API event creation with short URL | None (API-driven) |
+| **Backstage** | Script | ❌ No API | Provide copy + checklist | Human logs in and posts |
+| **Facebook/Instagram groups** | Script | ❌ ToS risk | Provide copy + image + timing | Human posts to avoid bans |
+| **Film Commissions (web forms)** | Script | ✅ Yes | Form-filler payload (Chrome ext) | Human reviews and submits |
+| **Stage 32, FilmFreeway forums** | Script | ⚠️ Conditional | Provide tailored copy | Human posts respecting rules |
+
+**Legend:**
+- **Auto:** Route4 executes via API; logs results automatically
+- **Script:** Route4 generates payload; human executes; logs completion manually or via extension
+
+---
+
+### 11.3 Phase I — Directory Curation & Contact Tracking (Detailed Design)
+
+**Goal:** Build a structured, queryable database of film communities with contact tracking to prevent duplicate outreach and measure campaign effectiveness.
+
+#### 11.3.1 Data Models
+
+**OutreachDirectory (Community Profiles)**
+
+```csharp
+public class OutreachCommunity
+{
+    public Guid Id { get; set; }
+    public required string Name { get; set; } // "Greater Cleveland Film Commission"
+    public required string Type { get; set; } // FilmCommission, Forum, FacebookGroup, RedditSub, DiscordServer, Email, SMS
+    public required string Channel { get; set; } // Auto or Script
+    
+    // Contact Info
+    public string? Website { get; set; }
+    public string? SubmissionFormUrl { get; set; } // For film commissions
+    public string? ApiEndpoint { get; set; } // For auto channels
+    public string? ContactEmail { get; set; }
+    public string? SocialHandle { get; set; } // @backstage, r/Filmmakers, etc.
+    
+    // Targeting Metadata
+    public string[] Genres { get; set; } = Array.Empty<string>(); // Drama, Horror, Documentary
+    public string[] Locations { get; set; } = Array.Empty<string>(); // Ohio, Northeast, USA
+    public string[] Tags { get; set; } = Array.Empty<string>(); // IndieFilm, StudentFilm, LocalTalent
+    public int? EstimatedReach { get; set; } // Community size (followers, members)
+    
+    // Compliance & Rules
+    public string? PostingRules { get; set; } // "No self-promotion Mondays; max 1 post/week"
+    public bool RequiresApproval { get; set; } // Moderator approval needed?
+    public string? ComplianceNotes { get; set; } // "Must engage 3x before posting"
+    public bool HasCaptcha { get; set; }
+    
+    // Performance Tracking
+    public int TotalOutreachAttempts { get; set; } // How many times we've contacted
+    public DateTime? LastContactedAt { get; set; }
+    public int SuccessfulConversions { get; set; } // Witnesses recruited from this community
+    public decimal ConversionRate { get; set; } // SuccessfulConversions / TotalOutreachAttempts
+    
+    // Form-Filler Data (for Script channels)
+    public Dictionary<string, string>? FormFieldMap { get; set; } 
+    // Example: { "project_name": "#projectTitle", "contact_email": "#email", "description": "textarea[name='desc']" }
+    
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public bool IsActive { get; set; } = true; // Can be disabled if banned/deprecated
+}
+```
+
+**OutreachContact (Interaction Log)**
+
+```csharp
+public class OutreachContact
+{
+    public Guid Id { get; set; }
+    public Guid CommunityId { get; set; } // FK → OutreachCommunity
+    public Guid CastingCallId { get; set; } // FK → CastingCall
+    public Guid ClientId { get; set; } // Multi-tenant scope
+    
+    // Execution Details
+    public required string Channel { get; set; } // Auto or Script
+    public required string Method { get; set; } // Discord, Email, SMS, Backstage, FacebookGroup, FilmCommission
+    public required string Status { get; set; } // Queued, Sent, Delivered, Failed, Clicked, Converted
+    
+    // Tracking
+    public required string ShortUrlVariant { get; set; } // mary/c/invite?utm_source=backstage&utm_campaign=S1E1
+    public string? MessageId { get; set; } // Email messageId, Discord messageId, SMS sid, etc.
+    public string? PostUrl { get; set; } // For Script channels: URL to the post human created
+    
+    // Timing
+    public DateTime ScheduledAt { get; set; } // When it should be sent
+    public DateTime? SentAt { get; set; } // When it was actually sent/posted
+    public DateTime? ClickedAt { get; set; } // First click on short URL (from this contact)
+    public DateTime? ConvertedAt { get; set; } // When witness registered (Gate 1 triggered)
+    
+    // Metrics
+    public int TotalClicks { get; set; } // Clicks on this specific short URL variant
+    public bool DidConvert { get; set; } // Did this contact result in a witness?
+    
+    // Notes
+    public string? Notes { get; set; } // Human can log context: "Posted in weekly casting thread"
+    public string? ErrorMessage { get; set; } // If Status=Failed
+    
+    public DateTime CreatedAt { get; set; }
+}
+```
+
+**OutreachCampaign (Campaign Orchestration)**
+
+```csharp
+public class OutreachCampaign
+{
+    public Guid Id { get; set; }
+    public Guid CastingCallId { get; set; } // FK → CastingCall
+    public Guid ClientId { get; set; }
+    public required string Name { get; set; } // "Making of MARY - S1E1 Casting Call"
+    
+    // Configuration
+    public required string TierLevel { get; set; } // TierB_Level1, TierB_Level2, TierB_Level3
+    public int TargetWitnessCount { get; set; } // Goal: 100 witnesses
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; } // When Gate 1 triggered or campaign stopped
+    
+    // AI-Generated Artifacts
+    public string[]? CuratedCommunities { get; set; } // Array of OutreachCommunity IDs (AI-selected)
+    public Dictionary<string, string>? Scripts { get; set; } // CommunityId → tailored message
+    public Dictionary<string, DateTime>? PostingSchedule { get; set; } // CommunityId → optimal post time
+    
+    // Performance
+    public int TotalContacts { get; set; } // How many OutreachContact records
+    public int TotalClicks { get; set; }
+    public int TotalConversions { get; set; } // Witnesses recruited
+    public decimal ConversionRate { get; set; }
+    public decimal CostPerWitness { get; set; } // If Tier B charges apply
+    
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public string Status { get; set; } // Active, Paused, Completed, Cancelled
+}
+```
+
+#### 11.3.2 Database Schema
+
+```sql
+CREATE TABLE OutreachCommunities (
+    Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    Name NVARCHAR(200) NOT NULL,
+    Type NVARCHAR(50) NOT NULL, -- FilmCommission, Forum, etc.
+    Channel NVARCHAR(10) NOT NULL, -- Auto or Script
+    
+    Website NVARCHAR(500),
+    SubmissionFormUrl NVARCHAR(500),
+    ApiEndpoint NVARCHAR(500),
+    ContactEmail NVARCHAR(200),
+    SocialHandle NVARCHAR(100),
+    
+    Genres NVARCHAR(MAX), -- JSON array
+    Locations NVARCHAR(MAX), -- JSON array
+    Tags NVARCHAR(MAX), -- JSON array
+    EstimatedReach INT,
+    
+    PostingRules NVARCHAR(MAX),
+    RequiresApproval BIT DEFAULT 0,
+    ComplianceNotes NVARCHAR(MAX),
+    HasCaptcha BIT DEFAULT 0,
+    
+    TotalOutreachAttempts INT DEFAULT 0,
+    LastContactedAt DATETIME,
+    SuccessfulConversions INT DEFAULT 0,
+    ConversionRate DECIMAL(5,4) DEFAULT 0,
+    
+    FormFieldMap NVARCHAR(MAX), -- JSON object
+    
+    CreatedAt DATETIME DEFAULT GETUTCDATE(),
+    UpdatedAt DATETIME DEFAULT GETUTCDATE(),
+    IsActive BIT DEFAULT 1,
+    
+    INDEX IX_Type (Type),
+    INDEX IX_Channel (Channel),
+    INDEX IX_Locations (Locations), -- For geo-targeting
+    INDEX IX_ConversionRate (ConversionRate DESC)
+);
+
+CREATE TABLE OutreachContacts (
+    Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    CommunityId UNIQUEIDENTIFIER NOT NULL FOREIGN KEY REFERENCES OutreachCommunities(Id),
+    CastingCallId UNIQUEIDENTIFIER NOT NULL FOREIGN KEY REFERENCES CastingCalls(Id),
+    ClientId UNIQUEIDENTIFIER NOT NULL FOREIGN KEY REFERENCES Clients(Id),
+    
+    Channel NVARCHAR(10) NOT NULL, -- Auto or Script
+    Method NVARCHAR(50) NOT NULL, -- Discord, Email, Backstage, etc.
+    Status NVARCHAR(20) NOT NULL, -- Queued, Sent, Failed, Clicked, Converted
+    
+    ShortUrlVariant NVARCHAR(500) NOT NULL, -- Full UTM'd URL
+    MessageId NVARCHAR(200),
+    PostUrl NVARCHAR(500),
+    
+    ScheduledAt DATETIME NOT NULL,
+    SentAt DATETIME,
+    ClickedAt DATETIME,
+    ConvertedAt DATETIME,
+    
+    TotalClicks INT DEFAULT 0,
+    DidConvert BIT DEFAULT 0,
+    
+    Notes NVARCHAR(MAX),
+    ErrorMessage NVARCHAR(MAX),
+    
+    CreatedAt DATETIME DEFAULT GETUTCDATE(),
+    
+    INDEX IX_CastingCall (CastingCallId),
+    INDEX IX_Community (CommunityId),
+    INDEX IX_Status (Status),
+    INDEX IX_ScheduledAt (ScheduledAt),
+    INDEX IX_ShortUrl (ShortUrlVariant)
+);
+
+CREATE TABLE OutreachCampaigns (
+    Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+    CastingCallId UNIQUEIDENTIFIER NOT NULL FOREIGN KEY REFERENCES CastingCalls(Id),
+    ClientId UNIQUEIDENTIFIER NOT NULL FOREIGN KEY REFERENCES Clients(Id),
+    Name NVARCHAR(200) NOT NULL,
+    
+    TierLevel NVARCHAR(50) NOT NULL,
+    TargetWitnessCount INT NOT NULL,
+    StartDate DATETIME NOT NULL,
+    EndDate DATETIME,
+    
+    CuratedCommunities NVARCHAR(MAX), -- JSON array of IDs
+    Scripts NVARCHAR(MAX), -- JSON object
+    PostingSchedule NVARCHAR(MAX), -- JSON object
+    
+    TotalContacts INT DEFAULT 0,
+    TotalClicks INT DEFAULT 0,
+    TotalConversions INT DEFAULT 0,
+    ConversionRate DECIMAL(5,4) DEFAULT 0,
+    CostPerWitness DECIMAL(10,2) DEFAULT 0,
+    
+    CreatedAt DATETIME DEFAULT GETUTCDATE(),
+    UpdatedAt DATETIME DEFAULT GETUTCDATE(),
+    Status NVARCHAR(20) DEFAULT 'Active',
+    
+    INDEX IX_CastingCall (CastingCallId),
+    INDEX IX_Status (Status)
+);
+```
+
+#### 11.3.3 API Endpoints (Phase I)
+
+**Outreach Directory Management**
+
+```
+POST /api/outreach/communities
+Body: { name, type, channel, website, genres[], locations[], postingRules, formFieldMap{} }
+Response: OutreachCommunity (created)
+Purpose: Add new community to directory (admin-only initially; AI-curated later)
+
+GET /api/outreach/communities?type={FilmCommission|Forum|...}&channel={Auto|Script}&location={Ohio}
+Response: List<OutreachCommunity> (filtered)
+Purpose: Query directory for targeting
+
+PUT /api/outreach/communities/{id}
+Body: { partial update fields }
+Response: OutreachCommunity (updated)
+Purpose: Update rules, formFieldMap, or disable community
+
+GET /api/outreach/communities/{id}/performance
+Response: { totalAttempts, conversions, conversionRate, lastContacted, topPerformingCampaigns[] }
+Purpose: Performance analytics per community
+```
+
+**Contact Tracking**
+
+```
+POST /api/outreach/contacts
+Body: { communityId, castingCallId, channel, method, scheduledAt, shortUrlVariant }
+Response: OutreachContact (created with Status=Queued)
+Purpose: Log planned outreach (auto-scheduled or human-logged)
+
+PUT /api/outreach/contacts/{id}/status
+Body: { status, sentAt?, messageId?, postUrl?, notes? }
+Response: OutreachContact (updated)
+Purpose: Update contact status (e.g., Script channel human confirms "Sent")
+
+GET /api/outreach/contacts?castingCallId={id}&status={Queued|Sent|Clicked|Converted}
+Response: List<OutreachContact>
+Purpose: Campaign dashboard (see what's pending, what converted)
+
+POST /api/outreach/contacts/{id}/click
+Body: { clickedAt }
+Response: OutreachContact (updated with ClickedAt, Status=Clicked)
+Purpose: Webhook from ShortUrlController when UTM'd link clicked
+```
+
+**Campaign Management**
+
+```
+POST /api/outreach/campaigns
+Body: { castingCallId, name, tierLevel, targetWitnessCount, startDate }
+Response: OutreachCampaign (created)
+Purpose: Initiate campaign (triggers AI curation if Tier B)
+
+GET /api/outreach/campaigns/{id}
+Response: OutreachCampaign with nested contacts[], performance metrics
+Purpose: Campaign detail view
+
+PUT /api/outreach/campaigns/{id}/pause
+Response: OutreachCampaign (Status=Paused)
+Purpose: Pause outreach if witness threshold met early
+
+GET /api/clients/{clientSlug}/campaigns
+Response: List<OutreachCampaign> for client
+Purpose: Multi-campaign tracking
+```
+
+#### 11.3.4 Short URL Attribution Strategy
+
+**UTM Parameter Schema:**
+
+```
+Base URL: route4.studio/mary/c/invite
+UTM'd Variants:
+  - ?utm_source=backstage&utm_medium=forum&utm_campaign=S1E1_casting
+  - ?utm_source=discord&utm_medium=bot&utm_campaign=S1E1_casting
+  - ?utm_source=cleveland_film_comm&utm_medium=email&utm_campaign=S1E1_casting
+  - ?utm_source=reddit_filmmakers&utm_medium=post&utm_campaign=S1E1_casting
+```
+
+**ShortUrlController Enhancement:**
+
+```csharp
+// Existing: GET /shorturl/{code}
+// Enhancement: Log UTM params + associate with OutreachContact
+
+[HttpGet("shorturl/{code}")]
+public async Task<IActionResult> RedirectShortUrl(string code, [FromQuery] string? utm_source, [FromQuery] string? utm_medium)
+{
+    var shortUrl = await _context.ShortUrls.FirstOrDefaultAsync(s => s.Code == code);
+    if (shortUrl == null) return NotFound();
+    
+    // Log click
+    shortUrl.ClickCount++;
+    
+    // NEW: Associate click with OutreachContact (if utm_source provided)
+    if (!string.IsNullOrEmpty(utm_source))
+    {
+        var contact = await _context.OutreachContacts
+            .Where(c => c.ShortUrlVariant.Contains($"utm_source={utm_source}"))
+            .OrderByDescending(c => c.CreatedAt)
+            .FirstOrDefaultAsync();
+            
+        if (contact != null && contact.ClickedAt == null)
+        {
+            contact.ClickedAt = DateTime.UtcNow;
+            contact.Status = "Clicked";
+            contact.TotalClicks++;
+        }
+    }
+    
+    await _context.SaveChangesAsync();
+    return Redirect(shortUrl.TargetUrl);
+}
+```
+
+#### 11.3.5 Phase I Workflow: Directory Seeding
+
+**Initial Data Collection (Manual → AI-Assisted)**
+
+```
+Step 1: Manual Seed (Route4 staff, Week 1)
+├── Research 50 high-value communities
+│   ├── 10 film commissions (Ohio, Michigan, Pennsylvania, New York, California)
+│   ├── 10 forums (Backstage, Stage 32, FilmFreeway community, IndieWire forums)
+│   ├── 10 Facebook groups (Ohio Filmmakers, Indie Film Hustle, Local casting groups)
+│   ├── 10 Reddit subs (r/Filmmakers, r/acting, r/LocationSound, city-specific)
+│   └── 10 Discord servers (Film Riot, Indie Film Community, regional servers)
+├── Document:
+│   ├── Website, contact info, submission forms
+│   ├── Posting rules (from community guidelines/FAQ)
+│   ├── Estimated reach (follower counts, member counts)
+│   └── Compliance notes (captchas, approval requirements)
+└── Create OutreachCommunity records via API
+
+Step 2: AI Expansion (Week 2-4)
+├── AI agent scrapes:
+│   ├── Google: "film commission" + [state], "casting call submission" + [city]
+│   ├── Facebook: Search public groups with "filmmakers" + [location]
+│   ├── Reddit: Scrape /r/Filmmakers sidebar, related subs
+│   ├── Discord: Disboard.org search for "film" servers
+├── AI validates:
+│   ├── Is community active? (recent posts, not abandoned)
+│   ├── Do rules allow casting calls? (parse FAQ/pinned posts)
+│   ├── Extract form fields (for film commissions)
+├── Human reviews AI-curated list (filter hallucinations)
+└── Bulk import via POST /api/outreach/communities (batch endpoint)
+
+Step 3: Community Performance Baseline (Ongoing)
+├── First outreach to each community (test)
+├── Track: Did it convert? How many clicks?
+├── Update: ConversionRate, LastContactedAt
+└── Prioritize high-performers in future targeting
+```
+
+**Example: Greater Cleveland Film Commission Entry**
+
+```json
+{
+  "name": "Greater Cleveland Film Commission",
+  "type": "FilmCommission",
+  "channel": "Script",
+  "website": "https://clevelandfilm.com",
+  "submissionFormUrl": "https://clevelandfilm.com/resources/post-opportunity",
+  "contactEmail": "info@clevelandfilm.com",
+  "locations": ["Ohio", "Cleveland", "Northeast Ohio"],
+  "genres": ["All"], 
+  "tags": ["LocalProduction", "CrewOpportunities", "CastingCalls"],
+  "estimatedReach": 5000,
+  "postingRules": "Free to post crew/casting opportunities. Submissions reviewed within 48 hours.",
+  "requiresApproval": true,
+  "complianceNotes": "Include project name, dates, compensation details. No explicit content.",
+  "hasCaptcha": false,
+  "formFieldMap": {
+    "project_title": "#opportunity-title",
+    "description": "textarea[name='description']",
+    "contact_email": "#email",
+    "contact_phone": "#phone",
+    "opportunity_type": "select[name='type']", 
+    "submission_deadline": "#deadline"
+  }
+}
+```
+
+#### 11.3.6 Phase I Deliverables Checklist
+
+**Backend (Route4.Api)**
+- [ ] `OutreachCommunity`, `OutreachContact`, `OutreachCampaign` models added to Route4Models.cs
+- [ ] EF Core migration created and applied
+- [ ] `OutreachController` implemented with all Phase I endpoints
+- [ ] ShortUrlController enhanced with UTM tracking + OutreachContact association
+- [ ] Seed data: 50 communities manually curated (CSV import or SQL script)
+
+**Database**
+- [ ] Tables created with proper indexes
+- [ ] Seed script: Insert 50 OutreachCommunity records
+- [ ] Views: `vw_CommunityPerformance` (aggregates conversions per community)
+
+**Admin UI (Angular — Voltron Only)**
+- [ ] Community directory CRUD (list, create, edit, disable)
+- [ ] Contact log viewer (filter by campaign, status, community)
+- [ ] Campaign dashboard (active campaigns + performance metrics)
+- [ ] UTM builder (generates short URL variants with proper params)
+
+**Testing**
+- [ ] Unit tests: OutreachController endpoints
+- [ ] Integration test: Create campaign → log contact → track click → verify conversion
+- [ ] E2E test: Full flow from casting call creation → campaign → first contact logged
+
+**Documentation**
+- [ ] API docs: Swagger annotations for all outreach endpoints
+- [ ] Admin guide: How to add new communities, log Script contacts manually
+- [ ] UTM tracking guide: Naming conventions, attribution logic
+
+---
+
+### 11.4 Phase II — AI-Curated Targeting & Script Generation
+
+**Goal:** Given a casting call, AI selects 20–50 best-fit communities from directory and generates tone-matched outreach scripts.
+
+#### 11.4.1 AI Agent Input Schema
+
+```json
+{
+  "castingCallId": "guid",
+  "castingCallContent": {
+    "title": "Making of MARY - Seeking Ohio-based crew",
+    "logline": "Intimate character study, indie drama, shooting Cleveland Feb 2026",
+    "tone": "Serious, artistic, character-driven",
+    "genre": "Drama",
+    "locations": ["Ohio", "Cleveland"],
+    "roles": ["Cinematographer", "Sound Designer", "Production Assistant"],
+    "compensationModel": "Deferred + backend points",
+    "productionDates": "Feb 10-28, 2026"
+  },
+  "targetWitnessCount": 100,
+  "tierLevel": "TierB_Level3"
+}
+```
+
+#### 11.4.2 AI Agent Output Schema
+
+```json
+{
+  "curatedCommunities": [
+    {
+      "communityId": "guid",
+      "name": "Greater Cleveland Film Commission",
+      "fitScore": 0.95,
+      "rationale": "Geographic match (Cleveland), accepts casting calls, high conversion rate (12% historical)",
+      "recommendedChannel": "Script",
+      "estimatedReach": 5000
+    },
+    {
+      "communityId": "guid",
+      "name": "r/Ohio_Filmmakers (Reddit)",
+      "fitScore": 0.88,
+      "rationale": "Local community, active (200 posts/month), allows casting threads on Fridays",
+      "recommendedChannel": "Script",
+      "estimatedReach": 3200
+    }
+    // ... 18-48 more
+  ],
+  "scripts": {
+    "guid_cleveland_film_comm": {
+      "subject": "Casting Call: 'Making of MARY' - Cleveland-based Indie Drama",
+      "body": "Hi Greater Cleveland Film Commission,\n\nWe're Route4 Studios, currently in pre-production for 'Making of MARY,' an intimate character-driven drama shooting in Cleveland this February...\n\n[Tone: Professional, concise, includes all required fields per formFieldMap]\n\nBest,\nRoute4 on behalf of Making of MARY",
+      "compliance": "Includes project name, dates, compensation. No explicit content. Fits 'opportunity_type=Casting'."
+    },
+    "guid_reddit_ohio": {
+      "subject": "[Casting Call] Cleveland Indie Drama - Seeking Crew (Feb 2026)",
+      "body": "Hey r/Ohio_Filmmakers! 👋\n\nWe're casting for 'Making of MARY,' a low-budget character study shooting in Cleveland next month...\n\n[Tone: Casual, community-focused, uses emoji sparingly, respects Friday casting thread rule]\n\nInterested? Details here: [shortUrl]",
+      "compliance": "Post on Friday only. Flair as 'Casting'. No self-promotion in title."
+    }
+  },
+  "postingSchedule": {
+    "guid_cleveland_film_comm": "2026-01-07T10:00:00Z",
+    "guid_reddit_ohio": "2026-01-10T14:00:00Z" // Friday 2pm (peak activity)
+  },
+  "estimatedTotalReach": 125000,
+  "projectedConversions": 85, // Based on historical 0.068% average conversion
+  "confidenceScore": 0.82
+}
+```
+
+#### 11.4.3 AI Agent Architecture (Conceptual)
+
+```
+Route4.Outreach.AI (Separate service or Azure Function)
+├── Input: CastingCall + OutreachCommunity[] (from directory)
+├── Step 1: Semantic Matching
+│   ├── Embed casting call (genre, tone, location) via OpenAI embeddings
+│   ├── Embed each community's metadata (genres, locations, tags)
+│   ├── Compute cosine similarity scores
+│   └── Rank communities by fit
+├── Step 2: Rule-Based Filtering
+│   ├── Exclude: communities contacted <7 days ago (rate limit)
+│   ├── Exclude: communities with conversion rate <2% (poor performers)
+│   ├── Prefer: communities with historical conversions >5
+│   └── Respect: MaxContactsPerWeek config (default 3 Script channels)
+├── Step 3: Script Generation
+│   ├── For each selected community:
+│   │   ├── Load community.PostingRules + community.ComplianceNotes
+│   │   ├── Prompt GPT-4: "Generate casting call post for {community.Name}. Tone: {community.Tone inferred from Type}. Rules: {PostingRules}. Content: {CastingCall}."
+│   │   └── Store generated script in Scripts{}
+├── Step 4: Scheduling Optimization
+│   ├── Load community.HistoricalPostTimes (if tracked)
+│   ├── Default: Weekday mornings 10am-12pm for professional (FilmCommission), Fri evenings for casual (Reddit)
+│   └── Spread posts across 2 weeks (avoid spamming all at once)
+└── Output: JSON with curatedCommunities[], scripts{}, postingSchedule{}
+```
+
+**Human Review Step (Tier B Level 1):**
+- Route4 staff reviews AI output before delivery to creator
+- Checks: No hallucinated communities, scripts are authentic, compliance accurate
+- Adjusts: Removes any risky communities, fixes tone mismatches
+- Approves: Delivers final campaign plan to creator or executes (Level 2/3)
+
+---
+
+### 11.5 Phase III — Execution (Auto vs Script)
+
+#### 11.5.1 Auto Channel Execution (API-Driven)
+
+**Discord (Route4 Servers)**
+
+```csharp
+// DiscordBotService.PostCastingCallAsync
+public async Task PostCastingCallAsync(Guid communityId, string message, string shortUrl)
+{
+    var community = await _context.OutreachCommunities.FindAsync(communityId);
+    if (community.Type != "DiscordServer" || community.Channel != "Auto")
+        throw new InvalidOperationException("Not an auto Discord channel");
+    
+    var channelId = ulong.Parse(community.ApiEndpoint); // Stored as Discord channel ID
+    var channel = _discordClient.GetChannel(channelId) as IMessageChannel;
+    
+    var sentMessage = await channel.SendMessageAsync($"{message}\n\n{shortUrl}");
+    
+    // Log contact
+    var contact = new OutreachContact {
+        CommunityId = communityId,
+        Channel = "Auto",
+        Method = "Discord",
+        Status = "Sent",
+        ShortUrlVariant = shortUrl,
+        MessageId = sentMessage.Id.ToString(),
+        SentAt = DateTime.UtcNow
+    };
+    await _context.OutreachContacts.AddAsync(contact);
+    await _context.SaveChangesAsync();
+}
+```
+
+**Email (Opt-In List)**
+
+```csharp
+// EmailService.SendCastingCallEmailAsync
+public async Task SendCastingCallEmailAsync(string[] recipients, string subject, string body, string shortUrl)
+{
+    foreach (var email in recipients)
+    {
+        var message = new SendGrid.Helpers.Mail.SendGridMessage();
+        message.SetFrom(new EmailAddress("casting@route4.studio", "Route4 Casting"));
+        message.AddTo(email);
+        message.SetSubject(subject);
+        message.AddContent(MimeType.Html, $"{body}<br/><br/><a href='{shortUrl}'>Apply Here</a>");
+        
+        var response = await _sendGridClient.SendEmailAsync(message);
+        
+        // Log contact
+        var contact = new OutreachContact {
+            CommunityId = /* lookup email list community */,
+            Channel = "Auto",
+            Method = "Email",
+            Status = response.IsSuccessStatusCode ? "Sent" : "Failed",
+            ShortUrlVariant = shortUrl,
+            MessageId = response.Headers.GetValues("X-Message-Id").FirstOrDefault(),
+            SentAt = DateTime.UtcNow,
+            ErrorMessage = response.IsSuccessStatusCode ? null : await response.Body.ReadAsStringAsync()
+        };
+        await _context.OutreachContacts.AddAsync(contact);
+    }
+    await _context.SaveChangesAsync();
+}
+```
+
+**SMS (Opt-In Talent List)**
+
+```csharp
+// SMSService.SendCastingCallSMSAsync
+public async Task SendCastingCallSMSAsync(string[] phoneNumbers, string message, string shortUrl)
+{
+    foreach (var phone in phoneNumbers)
+    {
+        var smsMessage = await _twilioClient.Messages.CreateAsync(
+            to: new PhoneNumber(phone),
+            from: new PhoneNumber("+14405551234"), // Route4 Twilio number
+            body: $"{message}\n{shortUrl}"
+        );
+        
+        // Log contact
+        var contact = new OutreachContact {
+            CommunityId = /* lookup SMS list community */,
+            Channel = "Auto",
+            Method = "SMS",
+            Status = smsMessage.Status == MessageResource.StatusEnum.Sent ? "Sent" : "Failed",
+            ShortUrlVariant = shortUrl,
+            MessageId = smsMessage.Sid,
+            SentAt = DateTime.UtcNow,
+            ErrorMessage = smsMessage.ErrorMessage
+        };
+        await _context.OutreachContacts.AddAsync(contact);
+    }
+    await _context.SaveChangesAsync();
+}
+```
+
+#### 11.5.2 Script Channel Execution (Human-Assisted)
+
+**Backstage Post Pack (Deliverable to Creator)**
+
+```json
+{
+  "community": "Backstage",
+  "channel": "Script",
+  "instructions": [
+    "1. Log in to Backstage.com",
+    "2. Navigate to 'Post a Job' (https://www.backstage.com/casting/post/)",
+    "3. Fill form using payload below",
+    "4. Click 'Preview' → 'Publish'",
+    "5. Copy published URL and paste into Route4 Outreach Contact log"
+  ],
+  "payload": {
+    "jobTitle": "Cinematographer - Indie Drama (Cleveland, OH)",
+    "projectType": "Film",
+    "productionType": "Independent",
+    "description": "Route4 Studios is seeking a talented cinematographer for 'Making of MARY,' an intimate character-driven drama...\n\n[Full AI-generated copy]",
+    "compensation": "Deferred + backend points",
+    "location": "Cleveland, OH",
+    "startDate": "2026-02-10",
+    "endDate": "2026-02-28",
+    "applyUrl": "https://route4.studio/mary/c/invite?utm_source=backstage&utm_medium=job_post&utm_campaign=S1E1"
+  },
+  "complianceChecklist": [
+    "✅ No offensive language",
+    "✅ Compensation clearly stated",
+    "✅ Project name included",
+    "✅ Apply URL is Route4 short link (not external redirect)"
+  ],
+  "shortUrlVariant": "https://route4.studio/mary/c/invite?utm_source=backstage&utm_medium=job_post&utm_campaign=S1E1",
+  "logInstructions": "After posting, go to Route4 → Outreach → Log Contact. Enter: Community=Backstage, Status=Sent, PostUrl=[paste Backstage job URL]"
+}
+```
+
+**Film Commission Form-Filler Pack (Chrome Extension)**
+
+```json
+{
+  "community": "Greater Cleveland Film Commission",
+  "channel": "Script",
+  "formUrl": "https://clevelandfilm.com/resources/post-opportunity",
+  "fillPlan": {
+    "#opportunity-title": "Casting Call: 'Making of MARY' - Cleveland Indie Drama",
+    "textarea[name='description']": "[AI-generated description, 500 chars]",
+    "#email": "casting@route4.studio",
+    "#phone": "440-555-1234",
+    "select[name='type']": "Casting",
+    "#deadline": "2026-01-31",
+    "input[name='website']": "https://route4.studio/mary/c/invite?utm_source=cleveland_film_comm&utm_medium=form&utm_campaign=S1E1"
+  },
+  "instructions": [
+    "1. Install Route4 Outreach Helper (Chrome extension)",
+    "2. Navigate to form URL",
+    "3. Click extension icon → 'Apply Fill Plan'",
+    "4. Review pre-filled fields (edit if needed)",
+    "5. Complete any captcha/verification",
+    "6. Click 'Submit'",
+    "7. Extension auto-logs contact in Route4 (Status=Sent)"
+  ],
+  "compliance": "Requires approval (expect 48hr review). No follow-up needed."
+}
+```
+
+#### 11.5.3 Chrome Extension Architecture (Form-Filler)
+
+**Manifest (manifest.json)**
+
+```json
+{
+  "manifest_version": 3,
+  "name": "Route4 Outreach Helper",
+  "version": "1.0.0",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["https://route4.studio/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["content.js"]
+  }],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  }
+}
+```
+
+**Content Script (content.js)**
+
+```javascript
+// Listens for fill plan from extension popup
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'fillForm') {
+    const fillPlan = request.fillPlan;
+    
+    for (const [selector, value] of Object.entries(fillPlan)) {
+      const field = document.querySelector(selector);
+      if (field) {
+        if (field.tagName === 'SELECT') {
+          const option = Array.from(field.options).find(o => o.text === value || o.value === value);
+          if (option) field.value = option.value;
+        } else if (field.tagName === 'TEXTAREA' || field.tagName === 'INPUT') {
+          field.value = value;
+          field.dispatchEvent(new Event('input', { bubbles: true })); // Trigger validation
+        }
+      }
+    }
+    
+    sendResponse({ success: true, filledCount: Object.keys(fillPlan).length });
+  }
+});
+```
+
+**Popup UI (popup.html + popup.js)**
+
+```javascript
+// Fetch fill plan from Route4 API based on current URL
+async function loadFillPlan() {
+  const currentUrl = await getCurrentTabUrl();
+  const response = await fetch(`https://route4.studio/api/outreach/fillplan?url=${encodeURIComponent(currentUrl)}`, {
+    headers: { 'Authorization': `Bearer ${userToken}` }
+  });
+  
+  if (response.ok) {
+    const plan = await response.json();
+    document.getElementById('community-name').textContent = plan.community;
+    document.getElementById('apply-btn').onclick = () => applyFillPlan(plan.fillPlan);
+  } else {
+    document.getElementById('status').textContent = 'No fill plan for this page';
+  }
+}
+
+function applyFillPlan(fillPlan) {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    chrome.tabs.sendMessage(tabs[0].id, { action: 'fillForm', fillPlan }, (response) => {
+      if (response.success) {
+        document.getElementById('status').textContent = `✅ Filled ${response.filledCount} fields. Review and submit!`;
+        logContact(fillPlan.communityId, tabs[0].url); // Auto-log to Route4
+      }
+    });
+  });
+}
+
+async function logContact(communityId, postUrl) {
+  await fetch('https://route4.studio/api/outreach/contacts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+    body: JSON.stringify({
+      communityId,
+      channel: 'Script',
+      method: 'FilmCommission',
+      status: 'Sent',
+      postUrl,
+      sentAt: new Date().toISOString()
+    })
+  });
+}
+```
+
+---
+
+### 11.6 Feedback Loop & Conversion Tracking
+
+#### 11.6.1 Click Attribution (Already Implemented in ShortUrlController)
+
+```
+User clicks: https://route4.studio/mary/c/invite?utm_source=backstage&utm_campaign=S1E1
+  ↓
+ShortUrlController.RedirectShortUrl() extracts utm_source=backstage
+  ↓
+Finds OutreachContact with ShortUrlVariant matching "utm_source=backstage"
+  ↓
+Updates: ClickedAt, Status=Clicked, TotalClicks++
+  ↓
+Redirects to: https://route4.studio/making-of-mary/casting (actual landing page)
+```
+
+#### 11.6.2 Conversion Tracking (Witness Registration)
+
+```
+User submits witness registration form (or joins Discord via invite)
+  ↓
+WitnessEvent created with ReferralSource = ShortUrl.Code
+  ↓
+Background job (daily):
+  ├── Find OutreachContacts where Status=Clicked
+  ├── Check if WitnessEvent exists with matching ShortUrl code
+  ├── If match: Update OutreachContact.ConvertedAt, Status=Converted, DidConvert=true
+  └── Update OutreachCommunity.SuccessfulConversions++, recalculate ConversionRate
+```
+
+**WitnessEvent Enhancement:**
+
+```csharp
+public class WitnessEvent
+{
+    public Guid Id { get; set; }
+    // ... existing fields
+    
+    public string? ReferralSource { get; set; } // ShortUrl code (e.g., "mary/c/invite")
+    public string? UtmSource { get; set; } // Extracted from query params
+    public string? UtmCampaign { get; set; }
+    public Guid? OutreachContactId { get; set; } // FK → OutreachContact (if matched)
+}
+```
+
+#### 11.6.3 Performance Dashboard (Voltron UI)
+
+**Campaign Performance Card:**
+
+```
+Making of MARY - S1E1 Casting Call Campaign
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Status: Active | Started: Jan 5, 2026 | Days Running: 3
+
+Target: 100 witnesses | Current: 12 witnesses | Progress: 12%
+
+Outreach Summary:
+├── Total Contacts: 35
+├── Auto Channels: 15 (Discord: 5, Email: 10)
+├── Script Channels: 20 (Backstage: 5, Film Commissions: 10, Reddit: 5)
+├── Pending: 8 (scheduled for next 7 days)
+└── Failed: 2 (retry scheduled)
+
+Performance:
+├── Total Clicks: 142
+├── Conversion Rate: 8.5% (12 witnesses / 142 clicks)
+├── Cost Per Witness: $4.17 (assuming $50 Gate 1 / 12 witnesses)
+└── Projected Final Witnesses: 98 (based on current trajectory)
+
+Top Performing Communities:
+1. Greater Cleveland Film Commission (5 witnesses, 18% conversion)
+2. r/Ohio_Filmmakers (3 witnesses, 12% conversion)
+3. Backstage Cincinnati (2 witnesses, 8% conversion)
+
+Recommended Actions:
+⚠️ Increase outreach to Greater Cleveland Film Comm (high performer)
+✅ Continue current pace (on track to hit target by Jan 20)
+```
+
+---
+
+### 11.7 Implementation Roadmap
+
+**Phase I — Directory & Tracking (Weeks 1-4)**
+- [ ] Week 1: Data models, migrations, API endpoints
+- [ ] Week 2: Seed 50 communities (manual curation)
+- [ ] Week 3: Admin UI (CRUD for communities, contact log viewer)
+- [ ] Week 4: UTM tracking integration, first test campaign
+
+**Phase II — AI Targeting (Weeks 5-8)**
+- [ ] Week 5: AI agent architecture (embeddings + rule-based filtering)
+- [ ] Week 6: Script generation (GPT-4 integration with community rules)
+- [ ] Week 7: Human review workflow (Tier B Level 1 approval UI)
+- [ ] Week 8: End-to-end test (AI curates → human reviews → campaign approved)
+
+**Phase III — Execution (Weeks 9-12)**
+- [ ] Week 9: Auto channels (Discord, Email, SMS integrations)
+- [ ] Week 10: Chrome extension (form-filler for Script channels)
+- [ ] Week 11: Feedback loop (click → conversion tracking automation)
+- [ ] Week 12: Performance dashboard + analytics
+
+**Maintenance & Optimization (Ongoing)**
+- [ ] Monthly: Review community performance, disable low performers
+- [ ] Quarterly: Expand directory (add 25 new communities per quarter)
+- [ ] Yearly: Retrain AI embeddings with actual conversion data
+
+---
+
+### 11.8 Success Metrics
+
+**Phase I Goals:**
+- Directory: 50 communities documented with complete metadata
+- Contact Tracking: 100% of outreach attempts logged (auto + script)
+- UTM Attribution: 95%+ of clicks correctly attributed to source
+
+**Phase II Goals:**
+- AI Curation Accuracy: 80%+ of AI-selected communities rated "good fit" by human reviewers
+- Script Quality: 90%+ of AI-generated scripts require <10% human editing
+- Time Savings: Reduce campaign setup time from 8 hours (manual) to 1 hour (AI-assisted)
+
+**Phase III Goals:**
+- Auto Channel Success: 100% of Discord/Email/SMS sends logged with messageId
+- Script Channel Adoption: 70%+ of creators use form-filler extension (vs manual entry)
+- Conversion Rate: 5–10% average (witnesses recruited / total clicks)
+- Cost Per Witness: <$10 (total outreach cost / witnesses recruited)
+
+**Overall Campaign Goal (Tier B):**
+- Reach 100 witnesses per casting call within 30 days
+- Maintain <20% spam/ban rate (communities blocking Route4)
+- Achieve 15%+ creator retention (creators use Route4 for Episode 2+)
 - Year 1 platform earnings: $2,500 (premium positioning from Route4 presence)
 - Assuming 25% annual growth (improved by managed outreach): $8,200 cumulative
 - Route4 earns (15%): $1,230 over 5 years
@@ -2307,3 +3757,142 @@ that violate its constraints."
 
 **Next Immediate Action:**
 Phase 2 - Database migration to add DistributionMetadata column to ReleaseInstance table.
+
+---
+
+## Appendix B: Route4.FFmpeg Worker Service Implementation Status (Jan 5, 2026)
+
+**Decision Log:**
+- ✅ **2026-01-05**: Documented Route4.FFmpeg as separate Worker Service for multi-tenant media processing
+  - Rationale: Isolate CPU-intensive FFmpeg jobs from main API request cycle
+  - Architecture: Redis queue (primary) + MSSQL fallback
+  - Scaling: Horizontal (2-5 workers, auto-scale based on queue depth)
+
+**Implementation Checklist:**
+
+### Phase 1: Project Setup (Pending)
+- [ ] Create `Route4.FFmpeg.sln` or add to existing solution
+- [ ] Create `Route4.FFmpeg.Models/` (shared FFmpegJob class)
+- [ ] Create `Route4.FFmpeg.Services/` (service interfaces)
+- [ ] Create `Route4.FFmpeg.Worker/` (Console app with HostedService)
+- [ ] Update `.csproj` files to reference shared models
+
+### Phase 2: Job Queue Service (Pending)
+- [ ] Implement `IJobQueueService` interface
+- [ ] Create `RedisJobQueueService` implementation
+  - Dependencies: `StackExchange.Redis` NuGet
+  - Methods: `EnqueueAsync()`, `DequeueAsync()`, `UpdateAsync()`, `GetStatusAsync()`
+- [ ] Create `MSSQLJobQueueService` fallback implementation
+  - Table: `FFmpegJobs` (Status, CreatedAt, CompletedAt, ProcessingDurationMs)
+  - Polling: `SELECT TOP 1 FROM FFmpegJobs WHERE Status = 'Queued'`
+
+### Phase 3: FFmpeg Service (Pending)
+- [ ] Implement `IFFmpegService` interface
+- [ ] Create `FFmpegCliService` implementation
+  - Validates FFmpeg binary path from appsettings
+  - Builds CLI arguments based on job type
+  - Captures exit codes + stderr for error logging
+  - Sets timeout (default: 3600 seconds / 1 hour)
+- [ ] Job Type Builders:
+  - `BuildCreateFragmentProxyArgs()` - Trim + mute + multi-aspect
+  - `BuildCreateProcessPreviewArgs()` - Low-res + watermark + stills
+  - `BuildCreateReleaseRenditionsArgs()` - Master archive + 1080p public + thumbnails
+
+### Phase 4: Frame.io Upload Service (Pending)
+- [ ] Implement `IFrameioUploadService` interface
+- [ ] Create `FrameioUploadService` implementation
+  - Dependencies: Frame.io .NET SDK or HTTP client
+  - Methods: `UploadAsync(jobOutput)` → returns S3/Frame.io URL
+  - Folder structure: `route4-{clientSlug}/{releaseKey}/{stageName}/`
+
+### Phase 5: Worker Host Application (Pending)
+- [ ] Create `Program.cs` for Route4.FFmpeg.Worker
+  - Host builder: `.UseSerilog()` for structured logging
+  - Dependency injection: Register queue service, FFmpeg service, upload service
+  - HostedService: `FFmpegWorkerService`
+- [ ] Implement `FFmpegWorkerService` (HostedService)
+  - Constructor injection: IJobQueueService, IFFmpegService, IFrameioUploadService
+  - `ExecuteAsync()`: Main loop (poll queue, dequeue, process, update)
+  - Heartbeat logging every 60 seconds
+  - Graceful shutdown: Finish current job before stopping
+
+### Phase 6: Status Tracking Endpoints (Pending)
+- [ ] Add `IFFmpegJobRepository` to Route4.Api
+  - Query method: `GetJobsByReleaseAsync(clientId, releaseKey)`
+  - Query method: `GetJobByIdAsync(jobId)`
+- [ ] Add controller: `FFmpegJobsController`
+  - `GET /api/clients/{clientSlug}/releases/{releaseKey}/ffmpeg-jobs` → List all jobs for release
+  - `GET /api/clients/{clientSlug}/releases/{releaseKey}/ffmpeg-jobs/{jobId}` → Single job details + metrics
+
+### Phase 7: Monitoring & Metrics (Pending)
+- [ ] Add structured logging to all job transitions
+  - Log format: `[JobId] [ClientSlug] [JobType] [Status] Duration: {ms}ms`
+  - Include: InputSize, OutputSize, ErrorMessage (if failed)
+- [ ] Create dashboard queries (optional)
+  - Queue depth over time
+  - Average processing time per job type
+  - Success/failure rate by job type
+- [ ] Set up alerts
+  - Dead-letter queue depth > 5 (manual intervention)
+  - Queue wait time > 30 minutes (scaling needed)
+  - Worker heartbeat missing > 5 minutes (worker crashed)
+
+### Phase 8: Testing (Pending)
+- [ ] **Unit Tests**:
+  - FFmpeg argument builder (different job types, parameter validation)
+  - Job state transitions (Queued → Processing → Completed/Failed)
+  - Logging output format
+  
+- [ ] **Integration Tests**:
+  - Enqueue job to Redis → Dequeue in worker → Process → Update status
+  - Frame.io upload simulation (mock HTTP responses)
+  - Error handling (bad input file, FFmpeg timeout, network failure)
+  
+- [ ] **E2E Test**:
+  - Create release → Trigger SIGNAL ritual → Fragment job enqueued
+  - Monitor job status via API endpoint
+  - Verify output file stored in Frame.io
+
+### Phase 9: Deployment & Configuration (Pending)
+- [ ] Docker setup (optional)
+  - Base image: `mcr.microsoft.com/dotnet/runtime:9.0`
+  - Add FFmpeg binary: `RUN apt-get install ffmpeg`
+  - Copy Route4.FFmpeg.Worker assembly
+- [ ] appsettings configuration
+  - Development: Local Redis on 6379
+  - Production: Azure Redis Cache or managed Redis
+  - FFmpeg path: Environment variable (FFMPEG_BIN_PATH)
+- [ ] Environment variables
+  - `ROUTE4_FFmpeg:BinaryPath`
+  - `ROUTE4_JobQueue:ConnectionString`
+  - `ROUTE4_Frameio:ApiKey`
+
+### Phase 10: Billing & Cost Allocation (Pending)
+- [ ] Process completion logs feed into billing system
+  - Job type → Gate mapping: CreateFragmentProxy → Gate 2, CreateReleaseRenditions → Gate 5
+  - Cost calculation: Based on ProcessingDurationMs + OutputSize
+  - Example log entry: `[S1E1] CreateFragmentProxy completed in 205000ms (3 min 25 sec) → Gate 2: $10–$50 allocation`
+- [ ] Create cost report endpoint
+  - `GET /api/clients/{clientSlug}/releases/{releaseKey}/ffmpeg-costs` → Total compute cost for release
+  - Breaks down by job type + date range
+
+**Architecture Decisions Locked:**
+- FFmpeg as separate Worker Service (not embedded in API)
+- Redis queue primary, MSSQL fallback
+- Job processing is async (API returns 202 Accepted immediately)
+- Multi-tenant isolation via ClientId + ReleaseKey
+- Processing time logged for audit + billing purposes
+- Horizontal scaling supported (multiple workers can run in parallel)
+
+**Implementation Time Estimate:**
+- Phase 1-5 (Core worker): 2-3 weeks (depends on Redis setup, Frame.io API learning curve)
+- Phase 6-7 (Monitoring): 1 week
+- Phase 8 (Testing): 1-2 weeks
+- Phase 9-10 (Deployment + Billing): 1 week
+- **Total: 5-7 weeks**
+
+**Next Immediate Actions:**
+1. Set up Redis instance (local dev or Azure Redis Cache)
+2. Create Route4.FFmpeg.Models project with FFmpegJob class
+3. Implement IJobQueueService + RedisJobQueueService
+4. Build Phase 1 skeleton (console app, basic hosting)

@@ -56,13 +56,51 @@ public class ShortUrlController : ControllerBase
     }
 
     [HttpGet("{shortCode}")]
-    public async Task<IActionResult> RedirectShortUrl(string shortCode)
+    public async Task<IActionResult> RedirectShortUrl(
+        string shortCode, 
+        [FromQuery] string? utm_source = null,
+        [FromQuery] string? utm_medium = null,
+        [FromQuery] string? utm_campaign = null)
     {
         var shortUrl = await _context.ShortUrls.FirstOrDefaultAsync(s => s.ShortCode == shortCode);
         if (shortUrl == null || (shortUrl.ExpiresAt.HasValue && shortUrl.ExpiresAt < DateTime.UtcNow))
         {
             return NotFound();
         }
+
+        // Track click with UTM attribution
+        if (!string.IsNullOrEmpty(utm_source))
+        {
+            // Find matching contact by UTM params in ShortUrlVariant
+            var contact = await _context.OutreachContacts
+                .Where(c => c.ShortUrlVariant.Contains($"utm_source={utm_source}") &&
+                           (string.IsNullOrEmpty(utm_campaign) || c.ShortUrlVariant.Contains($"utm_campaign={utm_campaign}")))
+                .OrderByDescending(c => c.ScheduledAt)
+                .FirstOrDefaultAsync();
+
+            if (contact != null)
+            {
+                if (contact.ClickedAt == null)
+                {
+                    contact.ClickedAt = DateTime.UtcNow;
+                    contact.Status = "Clicked";
+                }
+                contact.TotalClicks++;
+
+                // Update community stats
+                var community = await _context.OutreachCommunities.FindAsync(contact.CommunityId);
+                if (community != null)
+                {
+                    community.LastContactedAt = DateTime.UtcNow;
+                }
+
+                await _context.SaveChangesAsync();
+                
+                _logger.LogInformation("UTM click tracked: source={Source}, campaign={Campaign}, contact={ContactId}", 
+                    utm_source, utm_campaign, contact.Id);
+            }
+        }
+
         return Redirect(shortUrl.TargetUrl);
     }
 

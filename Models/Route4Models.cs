@@ -122,6 +122,7 @@ public class ReleaseArtifact
 
 /// <summary>
 /// Witness Event - Tracking of witness participation and presence
+/// Enhanced with outreach attribution for conversion tracking
 /// </summary>
 public class WitnessEvent
 {
@@ -137,6 +138,12 @@ public class WitnessEvent
     
     public DateTime OccurredAt { get; set; }
     public string? Metadata { get; set; } // JSON for additional context
+    
+    // Outreach Attribution (Phase I)
+    public string? ReferralSource { get; set; } // ShortUrl code (e.g., "mary/c/invite")
+    public string? UtmSource { get; set; } // Extracted from query params (e.g., "backstage")
+    public string? UtmCampaign { get; set; } // Campaign identifier (e.g., "S1E1_casting")
+    public Guid? OutreachContactId { get; set; } // FK → OutreachContact (if matched)
 }
 
 /// <summary>
@@ -324,4 +331,126 @@ public class DistributionMetadataObject
     public string[] Platforms { get; set; } = Array.Empty<string>();
     public DateTime? SubmittedAt { get; set; }
     public string? SubmissionStatus { get; set; } // Pending, Accepted, Rejected
+}
+
+// ============================================================================
+// OUTREACH AI - Phase I: Directory & Contact Tracking Models
+// ============================================================================
+
+/// <summary>
+/// Outreach Community - Directory of film communities, commissions, forums, groups
+/// Stores contact info, compliance rules, performance metrics, and form-filler data
+/// </summary>
+public class OutreachCommunity
+{
+    public Guid Id { get; set; }
+    public required string Name { get; set; } // "Greater Cleveland Film Commission", "r/Filmmakers", "Backstage"
+    public required string Type { get; set; } // FilmCommission, Forum, FacebookGroup, RedditSub, DiscordServer, EmailList, SMSList
+    public required string Channel { get; set; } // Auto or Script
+    
+    // Contact Info
+    public string? Website { get; set; }
+    public string? SubmissionFormUrl { get; set; } // For film commissions
+    public string? ApiEndpoint { get; set; } // For auto channels (Discord channel ID, Reddit sub name, etc.)
+    public string? ContactEmail { get; set; }
+    public string? SocialHandle { get; set; } // @backstage, r/Filmmakers, etc.
+    
+    // Targeting Metadata
+    public string? GenresJson { get; set; } // JSON array: ["Drama", "Horror", "Documentary"]
+    public string? LocationsJson { get; set; } // JSON array: ["Ohio", "Northeast", "USA"]
+    public string? TagsJson { get; set; } // JSON array: ["IndieFilm", "StudentFilm", "LocalTalent"]
+    public int? EstimatedReach { get; set; } // Community size (followers, members)
+    
+    // Compliance & Rules
+    public string? PostingRules { get; set; } // "No self-promotion Mondays; max 1 post/week"
+    public bool RequiresApproval { get; set; } // Moderator approval needed?
+    public string? ComplianceNotes { get; set; } // "Must engage 3x before posting"
+    public bool HasCaptcha { get; set; }
+    
+    // Performance Tracking
+    public int TotalOutreachAttempts { get; set; } // How many times we've contacted
+    public DateTime? LastContactedAt { get; set; }
+    public int SuccessfulConversions { get; set; } // Witnesses recruited from this community
+    public decimal ConversionRate { get; set; } // SuccessfulConversions / TotalOutreachAttempts
+    
+    // Form-Filler Data (for Script channels) - JSON serialized
+    public string? FormFieldMapJson { get; set; } 
+    // Example: { "project_name": "#projectTitle", "contact_email": "#email", "description": "textarea[name='desc']" }
+    
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public bool IsActive { get; set; } = true; // Can be disabled if banned/deprecated
+}
+
+/// <summary>
+/// Outreach Contact - Interaction log for each outreach attempt
+/// Tracks execution, timing, attribution, and conversion
+/// </summary>
+public class OutreachContact
+{
+    public Guid Id { get; set; }
+    public Guid CommunityId { get; set; } // FK → OutreachCommunity
+    public OutreachCommunity? Community { get; set; }
+    public Guid CastingCallId { get; set; } // FK → CastingCall
+    public Guid ClientId { get; set; } // Multi-tenant scope
+    
+    // Execution Details
+    public required string Channel { get; set; } // Auto or Script
+    public required string Method { get; set; } // Discord, Email, SMS, Backstage, FacebookGroup, FilmCommission
+    public required string Status { get; set; } // Queued, Sent, Delivered, Failed, Clicked, Converted
+    
+    // Tracking
+    public required string ShortUrlVariant { get; set; } // Full UTM'd URL: mary/c/invite?utm_source=backstage&utm_campaign=S1E1
+    public string? MessageId { get; set; } // Email messageId, Discord messageId, SMS sid, etc.
+    public string? PostUrl { get; set; } // For Script channels: URL to the post human created
+    
+    // Timing
+    public DateTime ScheduledAt { get; set; } // When it should be sent
+    public DateTime? SentAt { get; set; } // When it was actually sent/posted
+    public DateTime? ClickedAt { get; set; } // First click on short URL (from this contact)
+    public DateTime? ConvertedAt { get; set; } // When witness registered (Gate 1 triggered)
+    
+    // Metrics
+    public int TotalClicks { get; set; } // Clicks on this specific short URL variant
+    public bool DidConvert { get; set; } // Did this contact result in a witness?
+    
+    // Notes
+    public string? Notes { get; set; } // Human can log context: "Posted in weekly casting thread"
+    public string? ErrorMessage { get; set; } // If Status=Failed
+    
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Outreach Campaign - Campaign orchestration for casting calls
+/// Links AI-curated communities, scripts, and scheduling with performance tracking
+/// </summary>
+public class OutreachCampaign
+{
+    public Guid Id { get; set; }
+    public Guid CastingCallId { get; set; } // FK → CastingCall
+    public Guid ClientId { get; set; }
+    public required string Name { get; set; } // "Making of MARY - S1E1 Casting Call"
+    
+    // Configuration
+    public required string TierLevel { get; set; } // TierB_Level1, TierB_Level2, TierB_Level3
+    public int TargetWitnessCount { get; set; } // Goal: 100 witnesses
+    public DateTime StartDate { get; set; }
+    public DateTime? EndDate { get; set; } // When Gate 1 triggered or campaign stopped
+    
+    // AI-Generated Artifacts (JSON serialized)
+    public string? CuratedCommunitiesJson { get; set; } // Array of OutreachCommunity IDs (AI-selected)
+    public string? ScriptsJson { get; set; } // CommunityId → tailored message
+    public string? PostingScheduleJson { get; set; } // CommunityId → optimal post time
+    
+    // Performance
+    public int TotalContacts { get; set; } // How many OutreachContact records
+    public int TotalClicks { get; set; }
+    public int TotalConversions { get; set; } // Witnesses recruited
+    public decimal ConversionRate { get; set; }
+    public decimal CostPerWitness { get; set; } // If Tier B charges apply
+    
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public string Status { get; set; } = "Active"; // Active, Paused, Completed, Cancelled
 }

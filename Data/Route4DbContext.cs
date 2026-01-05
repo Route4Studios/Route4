@@ -39,6 +39,11 @@ public class Route4DbContext : DbContext
     public DbSet<DiscordChannel> DiscordChannels { get; set; }
     public DbSet<DiscordRole> DiscordRoles { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
+    
+    // Outreach AI Models (Phase I)
+    public DbSet<OutreachCommunity> OutreachCommunities { get; set; }
+    public DbSet<OutreachContact> OutreachContacts { get; set; }
+    public DbSet<OutreachCampaign> OutreachCampaigns { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
